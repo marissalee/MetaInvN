@@ -1,0 +1,336 @@
+---
+title: "MIIN Part 3: clean"
+author: "Marissa Lee"
+date: "June 1, 2015"
+output: pdf_document
+---
+
+*Filename: MIIN_3_clean.Rmd*  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+_________________________________________________________________
+## Load data and libraries  
+
+1) Libraries and data that has already been processed by *MIIN_1_paperData.Rmd* and *MIIN_2_cwm.Rmd*
+```{r load,echo=FALSE, warning=FALSE}
+library(plyr)
+library(reshape2)
+
+#from paperData
+papers<-read.table("synthesizedData/paperData/papers_procd.txt", header=TRUE, sep="\t", quote="") # the quote part is needed to deal with the odd characters inside the doi and notes
+observations<-read.table("synthesizedData/paperData/observations_procd.txt", header=TRUE, sep="\t") 
+cover<-read.table("synthesizedData/paperData/cover_procd.txt", header=TRUE, sep="\t") 
+species<-read.table("synthesizedData/paperData/species_procd.txt", header=TRUE, sep="\t") 
+traits<-read.table("synthesizedData/paperData/traits_procd.txt", header=TRUE, sep="\t") 
+measures<-read.table("synthesizedData/paperData/measures_procd.txt", header=TRUE, sep="\t")
+
+#from cwm
+cwm<-read.table("synthesizedData/cwm/cwm.txt", header=TRUE, sep="\t")
+spIDcover<-read.table("synthesizedData/cwm/spIDcover.txt", header=TRUE, sep="\t")
+spIDtraits<-read.table("synthesizedData/cwm/spIDtraits.txt", header=TRUE, sep="\t")
+```
+
+2) Subset data by obsIDs with at least 1 focal exotic invasive species AND at least 1 nonfocal species
+```{r sub1,echo=FALSE, warning=FALSE}
+summ.spp <- ddply(species,~obsID,summarise, 
+                  numTotalspp=length(obsID), 
+                  numInvspp=sum(spInvasive=='invasive' & spExotic=='exotic' & spFocal=='focal'), 
+                  numNonFocalspp=sum(spFocal=='not focal'))
+exclude.1inv<-summ.spp[summ.spp$numInvspp == 0,'obsID']
+exclude.1nonfoc<-summ.spp[summ.spp$numNonFocal == 0,'obsID']
+exclude.tmp<-c(exclude.1inv,exclude.1nonfoc)
+exclude.obsID<-unique(exclude.tmp)
+
+paste('Exclude',length(exclude.obsID), 'observations because there is not at least 1 species that is invasive, exotic, AND focal')
+
+#identify the ok obsIDs
+observations1<-observations[!observations$obsID %in% exclude.obsID,]
+obsOK<-unique(observations1$obsID)
+
+#subset the remaining dfs from paperData
+cover1<-subset(cover, obsID %in% obsOK)
+species1<-subset(species, obsID %in% obsOK)
+traits1<-subset(traits, obsID %in% obsOK)
+measures1<-subset(measures, obsID %in% obsOK)
+
+#subset the dfs from cwm
+cwm1<-subset(cwm, obsID %in% obsOK)
+spTOobs<-function(df){ #first, need to convert the spID to an obsID column in these dfs
+  tmp<-ldply(strsplit(as.character(df[,'spID']), ".", fixed=T))
+  df[,'obsID']<-paste(tmp[,1],tmp[,2], sep=".")
+  return(df)
+}
+spIDcover<-spTOobs(spIDcover)
+spIDtraits<-spTOobs(spIDtraits)
+spIDcover1<-subset(spIDcover, obsID %in% obsOK)
+spIDtraits1<-subset(spIDtraits, obsID %in% obsOK)
+
+#annotate papers dataframe to reflect removal of observations and thus papers
+#identify which observations in the exclude list come from papers that had OK'd observations
+exclude.p1<-ldply(strsplit(as.character(exclude.obsID), ".", fixed=T))[,1]
+include.p1<-ldply(strsplit(as.character(obsOK), ".", fixed=T))[,1]
+reject.p<-unique(exclude.p1[!exclude.p1 %in% include.p1]) #if FALSE, then label these paperIDs as rejects
+papers[papers$paperID %in% reject.p,'reject']<-'Yes'
+newRationale<-'Not at least 1 species that is invasive, exotic, AND focal'
+papers$rejectRationale<-factor(papers$rejectRationale, levels=c(levels(papers$rejectRationale),newRationale))
+papers[papers$paperID %in% reject.p,'rejectRationale']<-newRationale
+papers1<-papers
+```
+
+3) Exclude soil measurement categories with too few measurements
+```{r sub2,echo=FALSE, warning=FALSE}
+summ.meas <- ddply(measures1,~measCat,summarise, 
+                   numMeas = length(obsID),
+                   numObs=length(unique(obsID)))
+paste('Remove these measurement types because there are very few observations')
+summ.meas[summ.meas$numObs < 12,]
+measOK<-summ.meas[!summ.meas$numObs <12,'measCat']
+
+#subset the remaining dfs from paperData
+measures2<-subset(measures1, measCat %in% measOK)
+measures3 <- droplevels(measures2)
+```
+
+
+4) Simplify ecosystem type categories
+#The 'other' category now consists of studies that took place in a dune system (2), or some combination of forest, grassland, wetland (2)  
+```{r sub4,echo=FALSE, warning=FALSE}
+###ecosystem type
+summ.obs.eco <- ddply(observations1,~ecosystCat,summarise, numObs=length(paperID), numPapers=length(unique(paperID)))
+#summ.obs.eco
+
+#limit ecosystem categories to forest, grassland, shrubland, wetland, and other
+criteria<-observations1$ecosystCat == 'forest,grassland' | 
+  observations1$ecosystCat == 'forest,grassland,wetland' | 
+  observations1$ecosystCat == 'dune'
+levels(observations1$ecosystCat) <- c(levels(observations1$ecosystCat), "other")
+observations1[criteria,'ecosystCat']<-'other'
+```
+
+5) Identify the legumes
+```{r sub5,echo=FALSE, warning=FALSE}
+#read-in the list of species that are legumes from Kew Gardens Institute
+legumes<-read.table("rawData/Leguminosae.txt", header=TRUE, sep=',')
+
+#pull the unique legume genuses
+LegGenus<-unique(legumes$Genus)
+#length(LegGenus)
+
+#select rows in species based on whether the species' genus name is present in LegGenus
+species1$legumeGenus<-'No'
+species1[species1$Genus %in% legumes$Genus,'legumeGenus']<-'Yes'
+#dim(species1[species1$Genus %in% legumes$Genus,])[1] #number of legumes in the species dataset
+
+#identify observations based on presence/absence of legume as invasive species
+selection<-species1$spInvasive == 'invasive' & species1$spExotic == 'exotic' & species1$spFocal == 'focal' & species1$legumeGenus == 'Yes'
+df.selection<-species1[selection,]
+LegObsIDs<-unique(df.selection$obsID)
+observations1$InvLeg<-'Non-legume'
+observations1[observations1$obsID %in% LegObsIDs,'InvLeg']<-'Legume'
+
+#identify observations based on % native legume species (not cover)
+df.notFocal<-species1[species1$spFocal == 'not focal',]
+summ.Leg <- ddply(df.notFocal,~obsID,summarise,
+                     NatnumLeg=sum(legumeGenus=='Yes'), 
+                     NatnumNotLeg=sum(legumeGenus=='No'),
+                  NatpercLeg=(NatnumLeg/(NatnumLeg + NatnumNotLeg))*100)
+
+summ.Leg$NatLeg<-'Legumes absent'
+summ.Leg[summ.Leg$NatnumLeg > 0,'NatLeg']<-'Legumes present'
+
+observations2<-merge(observations1, summ.Leg, by='obsID')
+```
+
+6) Identify the invasive species
+```{r sub5,echo=FALSE, warning=FALSE}
+
+#create an obsID x invasive species dataframe
+species.tmp<-subset(species1, spInvasive=='invasive' & spExotic=='exotic' & spFocal=='focal')
+OBSID<-unique(species.tmp$obsID)
+bindedrows<-numeric(0)
+i<-0
+for(i in 1:length(OBSID)){
+  invGenera<-paste(species.tmp[species.tmp$obsID == OBSID[i],'Genus'], collapse='_')
+  nspecies<-length(species.tmp[species.tmp$obsID == OBSID[i],'Genus'])
+  if(nspecies > 2){
+    invGenera<-'>2spp'
+  }
+  row<-data.frame(obsID=OBSID[i], invGenera)
+  bindedrows<-rbind(bindedrows,row)
+}
+species.tmp2<-bindedrows
+#View(species.tmp2)
+
+#merge by obsID to add invasive species name to observations table
+observations3<-merge(observations2, species.tmp2, by='obsID')
+```
+
+7) Write the newly pruned and annotated dataframes into the folder 'synthesized Data/clean'
+```{r subwrite,echo=FALSE, warning=FALSE}
+write.table(papers1, file='synthesizedData/clean/papers.txt', sep='\t',quote=F)
+write.table(observations3, file='synthesizedData/clean/observations.txt', sep='\t')
+write.table(cover1, file='synthesizedData/clean/cover.txt', sep='\t')
+write.table(species1, file='synthesizedData/clean/species.txt', sep='\t')
+write.table(traits1, file='synthesizedData/clean/traits.txt', sep='\t')
+write.table(measures3, file='synthesizedData/clean/measures.txt', sep='\t')
+write.table(cwm1, file='synthesizedData/clean/cwm.txt', sep='\t')
+write.table(spIDcover1, file='synthesizedData/clean/spIDcover.txt', sep='\t')
+write.table(spIDtraits1, file='synthesizedData/clean/spIDtraits.txt', sep='\t')
+```
+
+8) Prep full dataframe, calculate effect sizes for meta-analysis
+```{r subwrite2,echo=FALSE, warning=FALSE}
+chooseMeasType<-'nonSTD' #decide whether to use standardized/non-standardized soil measurement values
+chooseESType<-'SMD' #decide whether to use ROM or SMD to calculate effect sizes
+source('rmdCode/clean/script_prep.R')
+head(dat.all1)
+```
+
+9) Look at distributions
+```{r distprep, echo=TRUE, warning=FALSE}
+source('rmdCode/mytheme.R')
+library(ggplot2)
+dat1<-dat.all1
+
+#summarize dataset by unique obsID+measCats so that data is not duplicated (multiple traits per obsID+measCat)
+summ<-ddply(dat1, ~obsID+measCat, summarize,
+      uniqm1i = length(unique(m1i)),
+      uniqm2i = length(unique(m2i)),
+      uniqyi = length(unique(yi)),
+      total = sum(uniqm1i, uniqm2i,uniqyi))
+sum(summ$total != 3) # if 0, then obsID + measCat produces all unique rows
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i),
+                 m2i = unique(m2i),
+                 yi = unique(yi))
+
+#summarize dataset by unique obsID+traitCats so that data is not duplicated (multiple measures per obsID+traitCat)
+summ<-ddply(dat1, ~obsID+traitCat, summarize,
+      uniqInvArea = length(unique(InvArea_cwm)),
+      uniqInvSpInvArea = length(unique(InvSpInvArea_cwm)),
+      uniqNatArea = length(unique(NatArea_cwm)),
+      uniqCWMDiff = length(unique(CWMDiff_cwm)),
+      total = sum(uniqInvArea, uniqInvSpInvArea,uniqNatArea,uniqCWMDiff))
+sum(summ$total != 4) # if 0, then obsID + traitCat produces all unique rows
+dat1.tr<-ddply(dat1, ~obsID+traitCat, summarize,
+               InvArea = unique(InvArea_cwm),
+               InvSpInvArea = unique(InvSpInvArea_cwm),
+               NatArea = unique(NatArea_cwm),
+               CWMDiff = unique(CWMDiff_cwm))
+m.dat1.tr<-melt(dat1.tr, id.vars=c('obsID', 'traitCat'))
+```
+
+A. Soil measure effect sizes
+```{r distES, echo=TRUE, warning=FALSE}
+ggplot(dat1.meas, aes(x=yi)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of soil measurement ES')
+
+#get rid of outliers
+#nh
+dat1[dat1$measCat=='nh' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='nh' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+#no
+dat1[dat1$measCat=='no' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='no' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+#ph
+dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+#soiln
+dat1[dat1$measCat=='soiln' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='soiln' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+
+#update and re-plot
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i),
+                 m2i = unique(m2i),
+                 yi = unique(yi))
+ggplot(dat1.meas, aes(x=yi)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of soil measurement ES \n Outliers removed')
+```
+
+B. Standardized soil measures
+```{r distMeas, echo=TRUE, warning=FALSE}
+#m1i (invaded area soil measurements)
+ggplot(dat1.meas, aes(x=m1i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of invaded area soil measurement values')
+
+#m2i (reference area soil measurements)
+ggplot(dat1.meas, aes(x=m2i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of reference area soil measurement values')
+
+#Log-transform some measurements
+logtMeas<-c('nh','no','toti','soilmoi','som','soiln', 'biom', 'litterbiom','littercn', 'litterpercN','percN')
+nologtMeas<-unique(dat1$measCat)[!unique(dat1$measCat) %in% logtMeas]
+SD.logt<-function(meanval, sdval){
+  varval<-(sdval)^2
+  sd.logt<-sqrt(log10(1+varval/(meanval)^2))
+  return(sd.logt)
+}
+dat1$m1i_logt<-log10(dat1$m1i) #warning message about NaNs is because of negative rate values
+dat1$sd1i_logt<-SD.logt(meanval=dat1$m1i, sdval=dat1$sd1i)
+dat1$m2i_logt<-log10(dat1$m2i)
+dat1$sd2i_logt<-SD.logt(meanval=dat1$m2i, sdval=dat1$sd2i)
+#put the non-transformed data back into measures that shouldn't be transformed
+dat1[dat1$measCat %in% nologtMeas,'m1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m1i']
+dat1[dat1$measCat %in% nologtMeas,'sd1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd1i']
+dat1[dat1$measCat %in% nologtMeas,'m2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m2i']
+dat1[dat1$measCat %in% nologtMeas,'sd2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd2i']
+
+#update and re-plot
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i_logt),
+                 m2i = unique(m2i_logt),
+                 yi = unique(yi))
+ggplot(dat1.meas, aes(x=m1i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of invaded area soil measurement values \n Log-transformed')
+ggplot(dat1.meas, aes(x=m2i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of reference area soil measurement values \n Log-transformed')
+
+
+#get rid of outliers
+#ammonif
+dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
+
+dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+#dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
+
+
+#nitrif
+dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
+dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+#dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
+
+#nminz
+dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),]
+dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+#dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m2i_logt),]
+
+#update and re-plot
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i_logt),
+                 m2i = unique(m2i_logt),
+                 yi = unique(yi))
+ggplot(dat1.meas, aes(x=m1i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of invaded area soil measurement values \n Log-transformed and outliers removed')
+ggplot(dat1.meas, aes(x=m2i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of reference area soil measurement values \n Log-transformed and outliers removed')
+```
+
+C. CWM traits
+```{r distCWM, echo=TRUE, warning=FALSE}
+ggplot(m.dat1.tr, aes(x=value)) + facet_wrap(~traitCat+variable, scales='free', ncol=4) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of soil measurement ES')
+#looks good
+```
+
+9) Write/Save full dataframe
+```{r subwrite3,echo=FALSE, warning=FALSE}
+write.table(dat1, file='synthesizedData/clean/forAnalysis.txt', sep='\t')
+```
+
+
+
+
