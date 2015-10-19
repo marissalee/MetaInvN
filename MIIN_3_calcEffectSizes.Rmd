@@ -140,7 +140,7 @@ numNfixRows<-dim(species1[species1$Genus %in% nfixGenera.complete,])[1]
 numNonNfixRows<-dim(species1[!species1$Genus %in% nfixGenera.complete,])[1]
 paste('There are', numNfixRows, 'and',numNonNfixRows, 'species entries (species unique to each observation) that are N-fixing and non-N-fixing, respectively')
 
-#identify observations based on presence/absence of legume as invasive species
+#identify observations based on presence/absence of N-fixer as invasive species
 selection<-species1$spInvasive == 'invasive' & species1$spExotic == 'exotic' & species1$spFocal == 'focal' & species1$nfixGenus == 'Yes'
 df.selection<-species1[selection,]
 NfixObsIDs<-unique(df.selection$obsID)
@@ -150,7 +150,7 @@ numNfixRows<-sum(observations1$InvNfix == 'N-fixing')
 numNonNfixRows<-sum(observations1$InvNfix != 'N-fixing')
 paste('There are', numNfixRows, 'and',numNonNfixRows, 'observations that have N-fixing and non-N-fixing invasive species, respectively')
 
-#identify observations based on % native legume species (not cover)
+#identify observations based on % native N-fixing species (not cover)
 df.notFocal<-species1[species1$spFocal == 'not focal',]
 summ.Nfix <- ddply(df.notFocal,~obsID,summarise,
                      NatnumNfix=sum(nfixGenus=='Yes'), 
@@ -162,7 +162,15 @@ numNfixRows<-sum(summ.Nfix$NatNfix == 'N-fixers present')
 numNonNfixRows<-sum(summ.Nfix$NatNfix != 'N-fixers present')
 paste('There are', numNfixRows, 'and',numNonNfixRows, 'observations that have reference areas with N-fixers present and No N-fixers present, respectively')
 
+#create a composite Nfix factor
 observations2<-merge(observations1, summ.Nfix, by='obsID')
+observations2$Nfix<-paste(observations2$InvNfix, observations2$NatNfix, sep="_")
+unique(observations2$Nfix)
+observations2$Nfix<-revalue(observations2$Nfix, 
+                            c("Non-N-fixing_No N-fixers" = "No N-fixers",
+                              "N-fixing_No N-fixers" = "Invasive N-fixers only",
+                              "Non-N-fixing_N-fixers present" = "Resident N-fixers only",
+                              "N-fixing_N-fixers present" = "Invasive and resident N-fixers"))
 ```
 1E. Create a character string to identify the invasive species associated with each observation  
 ```{r idInvSp,echo=TRUE, warning=FALSE, message=FALSE}
@@ -250,7 +258,7 @@ dat.obs<-merge(dat,observations.c, by='obsID')
 dat.obs1<-dat.obs[,c('paperID','obsID','measCat',
                  'n1i', 'm1i', 'sd1i', 'n2i', 'm2i', 'sd2i',
                  'measQuality',
-                 'ecosystCat','studyType','InvNfix','NatNfix','invGenera')]
+                 'ecosystCat','studyType','InvNfix','NatNfix','Nfix','invGenera')]
 
 
 ### Re-organize cwm data and prep for merging ######################################################
@@ -292,7 +300,7 @@ dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
                  m1i = unique(m1i),
                  m2i = unique(m2i),
                  yi = unique(yi))
-head(dat1.meas) #each row is a unique obsID x measCat
+#head(dat1.meas) #each row is a unique obsID x measCat
 
 #summarize dataset by unique obsID+traitCats so that data is not duplicated (multiple measures per obsID+traitCat)
 summ<-ddply(dat1, ~obsID+traitCat, summarize,
@@ -307,13 +315,13 @@ dat1.tr<-ddply(dat1, ~obsID+traitCat, summarize,
                InvSpInvArea = unique(InvSpInvArea_cwm),
                NatArea = unique(NatArea_cwm),
                CWMDiff = unique(CWMDiff_cwm))
-head(dat1.tr) #each row is a unique obsID x traitCat
+#head(dat1.tr) #each row is a unique obsID x traitCat
 
 #summarize dataset by unique obsID+traitCats+variable (where variable == c(InvArea, InvSpInvArea, NatArea, CWMDiff)
 m.dat1.tr<-melt(dat1.tr, id.vars=c('obsID', 'traitCat')) 
-head(m.dat1.tr) #each row is a unique obsID x traitCat x variable
-sum(is.na(m.dat1.tr$traitCat)) #combination is not fully factorial, so there are NAs here
-sum(is.na(m.dat1.tr$value)) #combination is not fully factorial, so there are NAs here
+#head(m.dat1.tr) #each row is a unique obsID x traitCat x variable
+#sum(is.na(m.dat1.tr$traitCat)) #combination is not fully factorial, so there are NAs here
+#sum(is.na(m.dat1.tr$value)) #combination is not fully factorial, so there are NAs here
 m.dat1.tr1<-m.dat1.tr[!is.na(m.dat1.tr$value),] #get rid of the NAs
 ```
 3B. Distribution of effect size values
@@ -491,7 +499,7 @@ _________________________________________________________________
 # 4. Export dataframes
 ```{r exportData,echo=TRUE, warning=FALSE, message=FALSE}
 newfilename<-'papers.txt'
-write.table(papers.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+write.table(papers.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t', quote=TRUE, qmethod="double") # the quote part is needed to deal with the odd characters inside the doi and notes
 
 newfilename<-'observations.txt'
 write.table(observations.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')

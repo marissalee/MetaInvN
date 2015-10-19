@@ -1,0 +1,525 @@
+---
+title: "MIIN Part 4: Meta-dataset overview"
+author: "Marissa Lee"
+date: "June 1, 2015"
+output: pdf_document
+---
+
+**Filename: MIIN_4_datasetOverview.Rmd**  
+**This markdown file does the following tasks:**
+1. Article selection statistics  
+
+2. Number of papers and observations  
+
+3. Types of observations  
+
+4. Plant species statistics 
+
+5. Cover data statistics
+
+6. Trait data statistics  
+
+7. Soil measurement statistics  
+
+8. Effect size statistics  
+
+9. CWM trait value statistics  
+
+```{r libraries, echo=TRUE}
+knitr::opts_chunk$set(cache=TRUE)
+
+citation()
+library(plyr)
+if(nchar(system.file(package="plyr"))) citation("plyr")
+library(doBy)
+library(ggplot2)
+if(nchar(system.file(package="ggplot2"))) citation("ggplot2")
+library(reshape2)
+library(gridExtra)
+library(metafor)
+if(nchar(system.file(package="metafor"))) citation("metafor")
+
+source('CODE/mytheme.R')
+
+figuresPath<-file.path(getwd()[1], "FIGURES_TABLES", "overview") #where to put the saved plots
+fig.height<-2.5 #inches
+fig.width<- 2.5 #inches
+fig.res<-300
+
+#synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "overview") #where to put the clean dataframes
+
+#from MIIN_3_calcEffectSizes.Rmd
+papers<-read.table("DATA/DATA_SYNTHESIZED/calcES/papers.txt", sep="\t") 
+observations<-read.table("DATA/DATA_SYNTHESIZED/calcES/observations.txt", header=TRUE, sep="\t") 
+cover<-read.table("DATA/DATA_SYNTHESIZED/calcES/cover.txt", header=TRUE, sep="\t") 
+species<-read.table("DATA/DATA_SYNTHESIZED/calcES/species.txt", header=TRUE, sep="\t") 
+traits<-read.table("DATA/DATA_SYNTHESIZED/calcES/traits.txt", header=TRUE, sep="\t") 
+measures<-read.table("DATA/DATA_SYNTHESIZED/calcES/measures.txt", header=TRUE, sep="\t")
+cwm<-read.table("DATA/DATA_SYNTHESIZED/calcES/cwm.txt", header=TRUE, sep="\t")
+spIDcover<-read.table("DATA/DATA_SYNTHESIZED/calcES/spIDcover.txt", header=TRUE, sep="\t")
+spIDtraits<-read.table("DATA/DATA_SYNTHESIZED/calcES/spIDtraits.txt", header=TRUE, sep="\t")
+metaDataset<-read.table("DATA/DATA_SYNTHESIZED/calcES/metaDataset.txt", header=TRUE, sep="\t")
+```
+
+_________________________________________________________________
+# 1. Article selection statistics
+```{r articleSelect,echo=TRUE, warning=FALSE, message=FALSE}
+### Number of papers detected by source ###
+summ.papers <- ddply(papers,~source,summarise,
+                     numPapers=length(read), 
+                     numAcceptedPapers=sum(reject=='No'))
+summ.papers<-orderBy(~-numPapers, summ.papers)
+summ.papers
+
+### Number of unique number of papers detected ###
+summ.papers2 <- ddply(papers,~source+rejectRationale,summarise,
+                     numPapers=length(read), 
+                     numAcceptedPapers=sum(reject=='No'))
+summ.papers2<-orderBy(~-numPapers, summ.papers2)
+totalNumReturned<-sum(summ.papers$numPapers) #total number of papers detected
+numAlreadyFound<-sum(summ.papers2[summ.papers2$rejectRationale == 'alreadyFound' & !is.na(summ.papers2$rejectRationale),'numPapers']) #number of repeat papers
+numUnique<-totalNumReturned - numAlreadyFound #total number of unique papers detected
+paste(numUnique, 'unique papers identified by search criteria and their references')
+paste(sum(summ.papers$numAcceptedPapers), 'papers were accepted')
+length(unique(metaDataset$paperID)) #this should be the same number
+
+### Subset papers detected by the previous meta-analysis, Liao2007 ###
+papers$source2<-'New studies'
+papers[papers$source=='Liao2007','source2']<-'Liao 2008'
+papers$reject<-revalue(papers$reject, c("No"="Accepted papers", "Yes"="Rejected papers"))
+
+#plot number of papers that were accepted/rejected from Liao 2008 and this search
+pHist_papers<-ggplot(papers, aes(x=year, fill=source2)) + mytheme + 
+  facet_wrap(~reject, scales="free_y", ncol=1) + 
+  geom_histogram() +  scale_y_continuous(expand = c(0,0)) +
+  ylab('Count') + xlab('Year') +
+  scale_fill_manual(values=c('gray','black'))
+pHist_papers
+newfilename<-"pHist_papers.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*1.5, height = fig.height*2, res=fig.res)
+pHist_papers
+dev.off()
+
+#what was the year of the most recent data included in Liao 2008?
+maxLiaoyr<-max(papers[papers$source == 'Liao2007','year'])
+paste(maxLiaoyr, 'was the most recent year that data was included in the Liao 2008 meta-analysis')
+
+#how many accepted papers were published after the most recent Liao 2008 reference?  
+accepted.after<-subset(papers, source != 'Liao2007' & reject == 'Accepted papers' & year > maxLiaoyr)
+paste(dim(accepted.after)[1], 'papers were accepted after the most recent reference included in Liao 2008')
+
+#how many papers were rejected that were referenced in Liao 2008? Remember that Liao 2008 also addressed the impact of invasion on soil C pools and fluxes.
+rejected.Liao<-subset(papers, source == 'Liao2007' & reject == 'Rejected papers')
+numLiaoRej<-dim(rejected.Liao)[1]
+all.Liao<-subset(papers, source == 'Liao2007')
+numLiaoAll<-dim(all.Liao)[1]
+paste(dim(rejected.Liao)[1], 'papers that were used in Liao 2008 were rejected from this study, or', round((numLiaoRej/numLiaoAll) *100, digits=2), '% of Liao references')
+
+#How many papers were accepted that were published before the most recent Liao 2008 reference and were not included in the Liao 2008 references. 
+accepted.before<-subset(papers, source != 'Liao2007' & reject == 'Accepted papers' & year < maxLiaoyr)
+numAccBef<-dim(accepted.before)[1]
+paste(dim(accepted.before)[1], 'papers that were published before the most recent Liao 2008 reference were included in this meta-analysis, but overlooked by Liao 2008')
+```
+  
+_________________________________________________________________
+# 2. Number of papers and observations
+```{r papersObs,echo=TRUE, warning=FALSE, message=FALSE}
+#how many observations?
+paste(length(unique(observations$obsID)), 'observations in the full dataset')
+length(unique(metaDataset$obsID)) #these should be the same
+
+#how many observations per paper?
+summ.obs <- ddply(observations,~paperID,summarise, numObs=length(paperID))
+median(summ.obs$numObs); range(summ.obs$numObs)
+pHist_obs<-ggplot(summ.obs, aes(x=numObs)) + 
+  scale_y_continuous(expand=c(0,0)) + scale_x_continuous(expand=c(0,0)) +
+  geom_histogram() + mytheme + 
+  ylab('Count') + xlab('Number of observations per paper')
+pHist_obs
+```
+
+_________________________________________________________________
+# 3. Types of observations
+```{r obsTypes,echo=TRUE, warning=FALSE, message=FALSE}
+summ.obs.eco <- ddply(observations,~ecosystCat,summarise, numObs=length(paperID))
+summ.obs.st <- ddply(observations,~studyType,summarise, numObs=length(paperID))
+summ.obs.nfix <- ddply(observations,~Nfix,summarise, numObs=length(paperID))
+factorlist<-list(summ.obs.eco, summ.obs.st, summ.obs.nfix)
+factortab<-ldply(factorlist)
+factortab$factor<-c(rep('ecosystem',5), rep('studyType', 4), rep('legume',4))
+factortab$level<-NA
+factortab[!is.na(factortab$ecosystCat),'level']<-as.character(factortab[!is.na(factortab$ecosystCat),'ecosystCat'])
+factortab[!is.na(factortab$studyType),'level']<-as.character(factortab[!is.na(factortab$studyType),'studyType'])
+factortab[!is.na(factortab$Nfix),'level']<-as.character(factortab[!is.na(factortab$Nfix),'Nfix'])
+factortab1<-factortab[,c('factor','level','numObs')]
+factortab1
+
+newfilename<-'numObsTable.txt'
+write.table(factortab1, file=paste(figuresPath,newfilename, sep='/'), sep='\t') 
+```  
+
+_________________________________________________________________
+# 4. Plant species statistics 
+What is the distribution of invasive species per observation?  Native species? Are certain invasive species over-represented?  
+```{r spp,echo=TRUE, warning=FALSE, message=FALSE}
+#what is the distribution of invasive species per observation?
+summ.spp <- ddply(species,~obsID,summarise, 
+                  numTotalspp=length(obsID), 
+                  numInvspp=sum(spInvasive=='invasive' & spExotic=='exotic' & spFocal=='focal'), 
+                  numNonInvspp=sum(spInvasive=='not invasive'),
+                  numOthers=numTotalspp-(numInvspp + numNonInvspp))
+hist_Inv<-ggplot(summ.spp, aes(x=numInvspp)) + geom_histogram() + 
+  scale_y_continuous(expand=c(0,0)) + scale_x_continuous(expand=c(0,0)) + 
+  mytheme +  
+  ylab('Count') + xlab('Number of invasive species per observation')
+hist_Inv; median(summ.spp$numInvspp); range(summ.spp$numInvspp)
+
+hist_Nat<-ggplot(summ.spp, aes(x=numNonInvspp)) + geom_histogram() + 
+  scale_y_continuous(expand=c(0,0)) + scale_x_continuous(expand=c(0,0)) +  
+  mytheme +  
+  ylab('Count') + xlab('Number of non-invasive species per observation')
+hist_Nat; median(summ.spp$numNonInvspp); range(summ.spp$numNonInvspp)
+
+#number of observations per species
+summ.spp.nam <- ddply(species,~spName+spFocal+spExotic,summarise, 
+                  numObs=length(obsID), 
+                  numPapers=length(unique(paperID)))
+spp.many<-summ.spp.nam[which(summ.spp.nam$numObs > 9 & summ.spp.nam$spFocal == 'focal'),] #more than 9 observations
+spp.many.o<-orderBy(~-numObs, spp.many)
+spp.many.o
+positions<-spp.many.o$spName
+pHist_spp<-ggplot(spp.many.o, aes(x=spName, y=numObs)) + geom_bar(stat='identity') + 
+  scale_y_continuous(expand=c(0,0)) + scale_x_discrete(limits = positions) +
+  mytheme +  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  ylab('Number of observations') + xlab('Invasive species')
+pHist_spp
+newfilename<-'pHist_spp.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*2, height = fig.height*2, res=fig.res)
+pHist_spp
+dev.off()
+
+#which species appear both as exotic and native species in the dataset? 
+summ.spp <- ddply(species,~spName+spExotic, summarise, 
+                  numObs=length(obsID),
+                  numPapers=length(unique(paperID)))
+summ.spp.nam2 <- ddply(summ.spp,~spName,summarise, 
+                  numInvNat=length(spExotic)) 
+summ.spp.nam2[summ.spp.nam2$numInvNat==2,] # if the length of spInvasive col==2, then there is native and invasive listed
+```  
+
+_________________________________________________________________
+# 5. Cover data statistics
+What percent of observations have measured cover data? 
+```{r cover,echo=TRUE, warning=FALSE, message=FALSE}
+summ.cov.obs <- ddply(cover,~obsID,summarise, 
+                  numMeasured= sum(covQuality=='measured'))
+numMeasured.obs<-sum(summ.cov.obs$numMeasured > 0) #number of observations with cover measurement values
+numtotal.obs<-length(summ.cov.obs$numMeasured > 0) #total number of observations
+cov.obs.perc<-round((numMeasured.obs / (numtotal.obs) ) *100, digits=2)
+paste(cov.obs.perc, '% of observations have any cover data at all that was measured in the original paper',collapse='')
+
+#What is the frequency of cover observations for each cover measure type? 
+summ.cov <- ddply(cover,~covCat,summarise, 
+                  numMeas = length(obsID),
+                  numObs=length(unique(obsID)), 
+                  numPapers=length(unique(paperID)))
+orderBy(~-numMeas, summ.cov)
+
+#What units are commonly reported for each cover measure type?
+summ.covUnit <- ddply(cover,~covCat+covUnit,summarise, 
+                      numMeas = length(obsID),
+                      numObs=length(unique(obsID)), 
+                      numPapers=length(unique(paperID)))
+COVCAT<-unique(summ.covUnit$covCat)
+covUnitList<-list()
+i<-0
+for(i in 1:length(COVCAT)){
+  subdf<-summ.covUnit[summ.covUnit$covCat==COVCAT[i],]
+  covUnitList[[as.character(COVCAT[i])]]<-orderBy(~-numMeas, subdf)
+}
+covUnitList
+
+#A more detailed look at cover data quality as it contributes to CWM values...
+cwm.calc<-subset(cwm, qualityCWMcalc == 'calculated')
+summ.cwm <- ddply(cwm.calc,~traitCat+invType,summarise,
+                  numObs=length(unique(obsID)),
+                  num1spAll_1=sum(qualityCover=='Measured=All, 1sp=All'),
+                  num1spAll_2=sum(qualityCover=='Measured=None, 1sp=All'),
+                  num1spAll_3=sum(qualityCover=='Measured=NA, 1sp=NA'),
+                  num1spAll_4=sum(qualityCover=='Measured=Mid, 1sp=All'),
+                  totalspAll=sum(num1spAll_1, num1spAll_2, num1spAll_3, num1spAll_4),
+                  perc1spAll=(totalspAll/numObs) *100,
+                  percEqual=100-perc1spAll)
+summ.cwm #cover data quality by traitCat and invType
+summ.cwm2 <- ddply(summ.cwm,~invType,summarise,
+                  mean1sp=mean(perc1spAll),
+                  meanEqual=mean(percEqual),
+                  seEqual=sd(percEqual)/sqrt(length(percEqual)))
+summ.cwm2 #aggregated across traitCat
+
+summ.cwm3 <- ddply(cwm,~invType+traitCat+obsID,summarise,
+                  numReported=sum(qualityCWMcalc=='reported'))
+summ.cwm4 <- ddply(summ.cwm3,~traitCat+invType,summarise,
+                  count=sum(numReported != 0),
+                  total=length(obsID),
+                  percCWMReported=(count/total)*100)
+summ.cwm4 #percent of CWM data that was reported in the original paper (rather than calculated based on species cover and trait database values)
+```  
+
+_________________________________________________________________
+# 6. Trait data statistics
+```{r traits,echo=TRUE, warning=FALSE, message=FALSE}
+# what percent of observations had trait data reported within the original article?
+n.ot<-length(unique(traits$obsID)) # number of observations with trait data
+n.o<-length(unique(observations$obsID)) # total number of observations
+tr.obs.perc<-round((n.ot/n.o) *100, digits=2) # percent of observations with trait data
+paste(tr.obs.perc, '% of observations with species-level trait data from the original paper',collapse='')
+
+summ.tr <- ddply(traits,~traitCat,summarise, 
+                 numObs = length(unique(obsID)), 
+                 numPapers = length(unique(paperID)))
+summ.tr.o<-orderBy(~-numObs, summ.tr)
+summ.tr.o
+positions<-summ.tr.o$traitCat
+pBar.tr<-ggplot(summ.tr.o, aes(x=traitCat, y=numObs)) + geom_bar(stat='identity') + 
+  scale_y_continuous(expand=c(0,0)) + 
+  scale_x_discrete(limits = positions, 
+                   labels = c("sp_percN" = "Leaf %N",
+                              "sp_cn" = "Leaf C:N", 
+                              "sp_litterpercN" = "Litter %N",
+                              "sp_littercn" = "Litter C:N")) +
+  mytheme +  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  ylab('Number of observations') + xlab('Trait type (species-level)')
+
+#What units and methods are commonly reported for each measurement? 
+summ.traitUnit <- ddply(traits,~traitCat+traitUnit,summarise, 
+                   numMeas = length(obsID),
+                   numObs=length(unique(obsID)), 
+                   numPapers=length(unique(paperID)))
+summ.traitUnit
+TRAITCAT<-unique(summ.traitUnit$traitCat)
+traitUnitList<-list()
+i<-0
+for(i in 1:length(TRAITCAT)){
+  subdf<-summ.traitUnit[summ.traitUnit$traitCat==TRAITCAT[i],]
+  traitUnitList[[as.character(TRAITCAT[i])]]<-orderBy(~-numMeas, subdf)
+}
+traitUnitList
+```  
+
+_________________________________________________________________
+# 7. Soil measurement statistics
+```{r meas,echo=TRUE, warning=FALSE, message=FALSE}
+summ.meas <- ddply(measures,~measCat,summarise, numObs=length(unique(obsID)))
+summ.meas.o<-orderBy(~-numObs, summ.meas)
+summ.meas.o
+
+#What units and methods are commonly reported for each measurement?  
+summ.measUnit <- ddply(measures,~measCat+unit,summarise, 
+                   numMeas = length(obsID),
+                   numObs=length(unique(obsID)))
+MEASCAT<-unique(summ.measUnit$measCat)
+measUnitList<-list()
+i<-0
+for(i in 1:length(MEASCAT)){
+  subdf<-summ.measUnit[summ.measUnit$measCat==MEASCAT[i],]
+  measUnitList[[as.character(MEASCAT[i])]]<-orderBy(~-numMeas, subdf)
+}
+measUnitList
+
+#re-order measCat levels
+metaDataset$measCat <- factor(metaDataset$measCat, levels = measCat_order)
+
+#re-shape measures so that inv and nat are in the same column temporarily
+tmp<-ddply(metaDataset, ~obsID+measCat, summarize,
+      m1i_logt = unique(m1i_logt),
+      m2i_logt = unique(m2i_logt),
+      measQuality = unique(measQuality))
+tmp$obsID<-as.factor(tmp$obsID)
+colnames(tmp)
+m.tmp<-melt(tmp, idcols=c('obsID','measCat','measQuality'))
+m.tmp$invType<-rep(NA,length(dim(m.tmp)[1])) 
+m.tmp[m.tmp$variable == 'm1i_logt','invType']<-'inv'
+m.tmp[m.tmp$variable == 'm2i_logt','invType']<-'ref'
+
+#Shapiro Test
+# ddply(measures, ~measCat, summarise, 
+#       shapTest=shapiro.test(value)$p.value,
+#       shapTest.Ln=shapiro.test(log(value+1))$p.value)
+#none are normal according to Shapiro test
+
+# Q-Q plots
+qq<-ggplot(m.tmp, aes(sample=value)) + 
+  facet_wrap(~measCat, scales='free', ncol=3) +
+  stat_qq() + mytheme + ggtitle('QQ Plots of \nstd. measurement values')
+qq
+newfilename<-"qq_meas.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+qq
+dev.off()
+
+
+# Plot Quality Histograms
+#re-order measQuality levels
+m.tmp$measQuality <- factor(m.tmp$measQuality, levels = c('NoAgg.NoConv','NoAgg.Conv','Agg.NoConv','Agg.Conv'))
+
+pHist_measQual<-ggplot(data=m.tmp, aes(x=value,fill=measQuality)) + mytheme +
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_fill_manual(name = "Quality",
+                    labels = c("Agg.Conv"="Aggregated & Converted", 
+                               "Agg.NoConv"="Aggregated",
+                               "NoAgg.Conv"="Converted",
+                               "NoAgg.NoConv"="None"),
+                    values=c("Agg.Conv" = "purple",
+                             "Agg.NoConv" = "red",
+                             "NoAgg.Conv" = "blue",
+                             "NoAgg.NoConv" = "black")) +
+  ylab('Count') + xlab('Standardized measurement value')
+pHist_measQual
+newfilename<-"pHist_measQual.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3.5, height = fig.height*6, res=fig.res)
+pHist_measQual
+dev.off()
+```  
+
+_________________________________________________________________
+# 8. Effect size statistics
+```{r ESmeas,echo=TRUE, warning=FALSE, message=FALSE}
+#re-shape measures so that inv and nat are in the same column temporarily
+tmp<-ddply(metaDataset, ~obsID+measCat, summarize,
+      yi = unique(yi),
+      measQuality = unique(measQuality))
+tmp$obsID<-as.factor(tmp$obsID)
+
+#Shapiro Test
+# ddply(measures, ~measCat, summarise, 
+#       shapTest=shapiro.test(value)$p.value,
+#       shapTest.Ln=shapiro.test(log(value+1))$p.value)
+#none are normal according to Shapiro test
+
+# Q-Q plots
+qq<-ggplot(tmp, aes(sample=yi)) + 
+  facet_wrap(~measCat, scales='free', ncol=3) +
+  stat_qq() + mytheme + ggtitle('QQ Plots of \nstd. measurement values')
+qq
+newfilename<-"qq_ESmeas.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+qq
+dev.off()
+
+#Plot Quality Histograms
+#re-order measQuality levels
+tmp$measQuality <- factor(tmp$measQuality, levels = c('NoAgg.NoConv','NoAgg.Conv','Agg.NoConv','Agg.Conv'))
+
+pHist_ESmeasQual<-ggplot(data=tmp, aes(x=yi,fill=measQuality)) + mytheme +
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_fill_manual(name = "Quality",
+                    labels = c("Agg.Conv"="Aggregated & Converted", 
+                               "Agg.NoConv"="Aggregated",
+                               "NoAgg.Conv"="Converted",
+                               "NoAgg.NoConv"="None"),
+                    values=c("Agg.Conv" = "purple",
+                             "Agg.NoConv" = "red",
+                             "NoAgg.Conv" = "blue",
+                             "NoAgg.NoConv" = "black")) +
+  ylab('Count') + xlab('Standardized measurement value')
+pHist_ESmeasQual
+newfilename<-"pHist_ESmeasQual.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3.5, height = fig.height*6, res=fig.res)
+pHist_measQual
+dev.off()
+```  
+
+_________________________________________________________________
+# 9. CWM trait value statistics
+```{r cwm,echo=TRUE, warning=FALSE, message=FALSE}
+#re-order measCat levels
+metaDataset$traitCat <- factor(metaDataset$traitCat, levels = traitCat_order)
+#re-shape measures so that inv and nat are in the same column temporarily
+tmp<-ddply(metaDataset, ~obsID+traitCat, summarize,
+      InvArea_cwm = unique(InvArea_cwm),
+      InvSpInvArea_cwm = unique(InvSpInvArea_cwm),
+      NatArea_cwm = unique(NatArea_cwm),
+      CWMDiff_cwm = unique(CWMDiff_cwm),
+      InvArea_qualRank = unique(InvArea_qualRank),
+      InvSpInvArea_qualRank = unique(InvSpInvArea_qualRank),
+      NatArea_qualRank = unique(NatArea_qualRank),
+      CWMDiff_qualRank = unique(InvArea_qualRank)+ unique(NatArea_qualRank))
+
+tmp$obsID<-as.factor(tmp$obsID)
+m.tmp<-melt(tmp, idcols=c('obsID','traitCat'))
+m.tmp$dataType<-rep(NA,length(dim(m.tmp)[1])) #dataType
+m.tmp[grepl('_qualRank', m.tmp$variable),'dataType']<-'qualRank'
+m.tmp[grepl('_cwm', m.tmp$variable),'dataType']<-'cwm'
+m.tmp$invType<-rep(NA,length(dim(m.tmp)[1])) #invType
+m.tmp[grepl('InvArea', m.tmp$variable),'invType']<-'InvArea'
+m.tmp[grepl('InvSpInvArea', m.tmp$variable),'invType']<-'InvSpInvArea'
+m.tmp[grepl('NatArea', m.tmp$variable),'invType']<-'NatArea'
+m.tmp[grepl('CWMDiff', m.tmp$variable),'invType']<-'CWMDiff'
+c.tmp<-dcast(m.tmp, obsID+traitCat+invType~dataType)
+c.tmp<-c.tmp[!is.na(c.tmp$cwm),]
+
+# #Shapiro Test
+# ddply(cwm, ~traitCat, summarise, 
+#       shapTest=shapiro.test(cwm)$p.value,
+#       shapTestLn=shapiro.test(log10(cwm))$p.value)
+# #none are normal according to Shapiro test
+
+# Q-Q plots
+qq<-ggplot(c.tmp, aes(sample=cwm)) + 
+  facet_wrap(~traitCat+invType, scales='free', ncol=4) + 
+  stat_qq() + mytheme + ggtitle('QQ Plots of \n cwm trait values')
+qq
+newfilename<-"qq_cwm.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*4, height = fig.height*3, res=fig.res)
+qq
+dev.off()
+
+
+#Plot Factor Histograms
+#InvType
+cwm$obsID<-as.factor(cwm$obsID)
+cwm$n_invSp_invArea<-as.factor(cwm$n_invSp_invArea)
+cwm$n_invSp_natArea<-as.factor(cwm$n_invSp_natArea)
+cwm$n_natSp_invArea<-as.factor(cwm$n_natSp_invArea)
+cwm$n_natSp_natArea<-as.factor(cwm$n_natSp_natArea)
+
+#Nfix
+cwm.tmp<-merge(cwm, observations, by='obsID')
+
+#plot
+cwm.tmp.cn<-subset(cwm.tmp, traitCat %in% c('cn','littercn'))
+pHist_cwm_cn<-ggplot(data=cwm.tmp.cn, aes(x=cwm,fill=Nfix)) + 
+  facet_wrap(~invType+traitCat, scales='fixed',ncol=2) + 
+  scale_y_continuous(expand=c(0,0)) + scale_x_continuous(expand=c(0,0)) +
+  geom_histogram() + mytheme +
+  ylab('Count') + xlab('CWM trait value')
+pHist_cwm_cn
+newfilename<-"pHist_cwm_cn.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*2.5, height = fig.height*3, res=fig.res)
+pHist_cwm_cn
+dev.off()
+
+cwm.tmp.percn<-subset(cwm.tmp, traitCat %in% c('percN','litterpercN'))
+pHist_cwm_percn<-ggplot(data=cwm.tmp.percn, aes(x=cwm,fill=Nfix)) + 
+  facet_wrap(~invType+traitCat, scales='fixed',ncol=2) + 
+  scale_y_continuous(expand=c(0,0)) + scale_x_continuous(expand=c(0,0)) +
+  geom_histogram() + mytheme +
+  ylab('Count') + xlab('CWM trait value')
+pHist_cwm_percn
+newfilename<-"pHist_cwm_percn.png"
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*2.5, height = fig.height*3, res=fig.res)
+pHist_cwm_percn
+dev.off()
+```  

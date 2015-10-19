@@ -1,0 +1,14 @@
+"factor"	"level"	"numObs"
+"1"	"ecosystem"	"forest"	123
+"2"	"ecosystem"	"grassland"	176
+"3"	"ecosystem"	"other"	4
+"4"	"ecosystem"	"shrubland"	73
+"5"	"ecosystem"	"wetland"	28
+"6"	"studyType"	"field expt addition"	45
+"7"	"studyType"	"field expt removal"	25
+"8"	"studyType"	"field study"	273
+"9"	"studyType"	"greenhouse expt"	61
+"10"	"legume"	"Invasive and resident N-fixers"	20
+"11"	"legume"	"Invasive N-fixers only"	51
+"12"	"legume"	"No N-fixers"	295
+"13"	"legume"	"Resident N-fixers only"	38
