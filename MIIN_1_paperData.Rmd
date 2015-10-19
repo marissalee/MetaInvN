@@ -1,0 +1,457 @@
+---
+title: 'MIIN Part 1a: Import, standardize, and clean the paper data'
+author: "Marissa Lee"
+date: "June 1, 2015"
+output: pdf_document
+---
+
+**Filename: MIIN_1_paperData.Rmd'**
+**This markdown file does the following tasks:**
+1. Minimially cleans raw data related to paper selection (papers) and the data collected within papers (observations, measures, cover, species, traits)  
+
+2. For data collected within papers (measures, cover, traits)... 
+  A. Standardize variance measurements
+  B. Aggregate values within an observation (i.e. measAgg, covAgg, traitAgg)
+  C. Convert values to a common unit  
+  
+3. Look for issues and outliers in all datasets  
+
+4. Export all cleaned datasets to DATA_SYNTHESIZED/paperData folder and histogram plots to FIGURES_TABLES/paperData
+
+```{r libraries, echo=TRUE}
+knitr::opts_chunk$set(cache=TRUE)
+library(reshape2)
+library(ggplot2)
+library(ggthemes)
+source('CODE/mytheme.R')
+figuresPath<-file.path(getwd()[1], "FIGURES_TABLES", "paperData") #where to put the saved plots
+fig.height<-2.5 #inches
+fig.width<- 2.5 #inches
+fig.res<-300
+synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "paperData") #where to put the clean dataframes
+```
+
+_________________________________________________________________
+# 1. LOAD RAW DATA (.TXT) AND DO SOME MINIMAL CLEANING:
+Cleaning involves: (a) Fix the format of NAs, (b) Make the row keys numeric in dataframe (e.g. obsID, xAggNum), (c) Check that there are no duplicate obsIDs, (d) Add row keys where needed (e.g. paperID, aggID: combine obsID and xAggNum, spID: combine obsID and spEntryID), (e) Check that trait and cover-generated spIDs match the 'species' dataframe's spID by species names, (f) Make data values numeric in each dataset
+```{r loadData, echo=TRUE, message=FALSE, warning=FALSE}
+source('CODE/paperData/script_load.R') #TASK= Load and clean raw data structure; NEEDS= files in rawData folder; MAKES = papers, observations, measures, measAgg, cover, covAgg, traits, traitAgg
+warnings() #warning messages that say 'NAs introduced' are okay
+
+measures<-measures1
+measAgg<-measAgg1
+```
+_________________________________________________________________
+# 2A. STANDARDIZE VARIANCE MEASUREMENTS
+Convert variance measures (e.g. SE, SD, 95CI) to variance (VAR) in the following datasets: cover, covAgg, traits, traitAgg, measures, measAgg
+```{r stdVar,echo=TRUE, message=FALSE, warning=FALSE}
+source('CODE/paperData/script_stdVar.R') #TASK= Standarize variance; NEEDS= cover, covAgg, traits, traitAgg, measures, measAgg; MAKES= ammends same df with extra columns
+```
+_________________________________________________________________
+# 2B. AGGREGATE VALUES WITHIN AN OBSERVATION 
+Aggregate mean and variance data from the xAgg files to complete the measure, cover, and trait datasets
+```{r agg,echo=TRUE, message=FALSE, warning=FALSE}
+# Review of some basic variance properties things:
+# - SD (standard deviation) = square.root(VAR (variance))
+# - SE (standard error) = SD (standard deviation) / square.root(N)
+# - CV (coefficient of variation) = SD (standard deviation) / mean
+# - Variance of a product of k random, independent variables: Product of (Var(x_k) + X^2) - Product of (X^2)
+# - Variance of a sum of k random, independent variables: Sum of (Var(x_k))
+
+### aggregate cover ########################
+source('CODE/paperData/script_agg_cover.R') 
+##TASK= Aggregate the 'agg' files into the main dataframe
+##NEEDS= cover, covAgg
+##MAKES= adds new cols to cover
+
+### aggregate traits ########################
+source('CODE/paperData/script_agg_traits.R') 
+##TASK= Aggregate the 'agg' files into the main dataframe
+##NEEDS= traits, traitAgg
+##MAKES= adds new cols to traits
+
+### aggregate measures ########################
+source('CODE/paperData/script_agg_measures.R') 
+##TASK= Aggregate the 'agg' files into the main dataframe
+##NEEDS= measures, measAgg
+##MAKES= adds new cols to measures
+```
+_________________________________________________________________
+# 2C. CONVERT VALUES TO A COMMON UNIT
+Attach these values as 'standardized' mean and var.  If the value can not be converted to the standardized unit, then simply enter NA.
+```{r commUnit,echo=TRUE, message=FALSE, warning=FALSE}
+# Remember that:
+# - Var(aX) = a^2 * Var(X)
+# - C:N values need to be in molC/molN; gC/gN * (14.0067/12.0107) -> molC/molN
+
+source('CODE/paperData/script_std.R') #TASK= Convert values to a common unit; NEEDS= cover, traits, measures; MAKES= adds new cols to cover, traits, measures
+
+# cover.new[1:10,c('covInvMean','stdmeanInv','covNatMean','stdmeanNat', 'covUnit','stdunit')]
+# cover.new[1:10,c('covInvVar_VAR','stdvarInv','covNatVar_VAR','stdvarNat', 'covUnit','stdunit')]
+# traits.new[1:10,c('traitMean','stdmean', 'traitUnit','stdunit')]
+# traits.new[1:10,c('traitVar_VAR','stdvar','traitUnit','stdunit')]
+# measures.new[1:10,c('measInvMean','stdmeanInv','measNatMean','stdmeanNat', 'measUnit','stdunit')]
+# measures.new[1:10,c('measInvVar_VAR','stdvarInv','measNatVar_VAR','stdvarNat', 'measUnit','stdunit')]
+```
+_________________________________________________________________
+# 3. LOOK FOR ISSUES AND OUTLIERS
+```{r outliers,echo=TRUE, warning=FALSE, message=FALSE}
+##########
+# PAPERS
+##########
+#View(papers)
+#length(unique(papers$paperID));dim(papers)# This looks fine for now. Potential issues that might need to be dealt with... odd characters, some strings are quoted, while others aren't
+
+##########
+# OBSERVATIONS
+##########
+#View(observations)
+#length(unique(observations$obsID));dim(observations)# This looks fine for now.
+#get rid of the columns with long notes. they have odd symbols in there that make it difficult to read/write
+removeCols<-colnames(observations) %in% c('obsMeasNote','obsCovNote','obsTraitNote','obsSpNote')
+observations1<-observations[,!removeCols]
+
+##########
+# SPECIES
+##########
+#View(species)
+#length(unique(species$spID));dim(species)# This looks fine for now.
+
+##########
+# COVER
+##########
+#View(cover)
+cover$covID<-paste(cover$obsID, as.numeric(cover$covEntryID), sep=".") #identify each row
+#length(unique(cover$covID));dim(cover)
+#tmp<-ddply(cover, ~covID, summarise, n = length(covID)) #there seem to be duplicate cover IDs
+#sum(tmp$n > 1) # this should be 0.  If not, there will be duplicate covIDs
+#morethan1<-which(tmp$n > 1)
+#tmp[morethan1,]
+# FOR COVER - Create and reshape so that inv and nat area is 1 factor column
+df<-cover
+m.df<-melt(df, id.vars=c("covID","aggID","covCat","covDescript","covInvasive","covMultiGrowth","covMultiHeight",
+                     "covSpEntryID","covNumSpp","spID","covVarType","covRef","covImageFile","covNote","covQuality","covUnit","stdunit"),
+            measure.vars=c('covInvMean','covInvVar','covInvN','covNatMean','covNatVar','covNatN',
+                           'covInvVar_VAR','covNatVar_VAR',
+                           'stdmeanInv','stdmeanNat','stdvarInv','stdvarNat')) #melt
+#add column to differentiate between inv and nat
+m.df$invType<-rep(NA,length(dim(m.df)[1])) #add column to differentiate between inv and nat
+m.df[grepl("Inv",m.df$variable),'invType']<-'inv'
+m.df[grepl("Nat",m.df$variable),'invType']<-'nat'
+#add column to differentiate between mean_std, var_std, mean, var, var_VAR, n
+m.df$valueType<-rep(NA,length(dim(m.df)[1])) #add column to differentiate between value types
+m.df[grepl("Mean",m.df$variable),'valueType']<-'mean'
+m.df[grepl("Var",m.df$variable),'valueType']<-'var'
+m.df[grepl("VAR",m.df$variable),'valueType']<-'var_VAR'
+m.df[grepl("stdmean",m.df$variable),'valueType']<-'mean_std'
+m.df[grepl("stdvar",m.df$variable),'valueType']<-'var_std'
+m.df[m.df$variable %in% c('covNatN','covInvN'),'valueType']<-'n'
+#cast
+c.df<-dcast(m.df, covID+invType~ valueType)
+idCols<-grepl("Inv",colnames(df)) | grepl("Nat",colnames(df))
+idCols[colnames(df)=='covInvasive']<-FALSE
+df1<-merge(df[,!idCols],c.df, by=c('covID'))
+#reorganize columns
+cover.clean<-df1[,c('covID','invType', #unique row identifiers
+                    'paperID','obsID','aggID', #IDs
+                    'covCat','covUnit','stdunit','covVarType','covRef','covImageFile','covNote','covQuality', #IDs
+                    'covDescript','covSpEntryID','covNumSpp','spID','covInvasive','covMultiGrowth','covMultiHeight', #IDs
+                    'mean','var','n','var_VAR','mean_std','var_std')] #data
+#View(cover.clean)
+# FOR COVER - Plot the histograms for the standardized cover values
+pHist_cover_Std<-ggplot(data=cover.clean, aes(x=mean_std, fill=covQuality)) + mytheme +
+  facet_wrap(~covCat, scales='free', ncol=1) + geom_histogram()+
+  scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of cover values\nUnits standardized')
+pHist_cover_Std
+
+##########
+# TRAITS
+##########
+traits$traitID<-paste(traits$obsID, as.numeric(traits$traitEntryID), sep=".") #identify each row
+#length(unique(traits$traitID));dim(traits)
+#tmp<-ddply(traits, ~traitID, summarise, n = length(traitID)) #there seem to be duplicate cover IDs
+#sum(tmp$n > 1) # this should be 0.  If not, there will be duplicate covIDs
+#morethan1<-which(tmp$n > 1)
+# FOR TRAITS - clarify quality
+traits$aggStatus<-rep(NA, dim(traits)[1])
+traits[is.na(traits$traitAggNum),'aggStatus']<-'NoAgg'
+traits[!is.na(traits$traitAggNum),'aggStatus']<-'Agg'
+# FOR TRAITS - reorganize columns
+traits.clean<-traits[,c('traitID', #unique row identifiers
+                    'paperID','obsID','aggID', #IDs
+                    'traitCat','traitUnit','stdunit','traitVarType','traitRef','traitImageFile', #IDs
+                    'spID', 'aggStatus',#IDs
+                    'traitMean','traitVar','traitN','traitVar_VAR','stdmean','stdvar')] #data
+colNums<-which(colnames(traits.clean) %in% c('traitMean','traitVar','traitN','traitVar_VAR','stdmean','stdvar'))
+colnames(traits.clean)[colNums]<-c('mean','var','n','var_VAR','mean_std','var_std')
+# FOR TRAITS - plot histogram for the standardized trait values
+pHist_traits_Std<-ggplot(data=traits.clean, aes(x=mean_std,fill=aggStatus)) + mytheme +
+  facet_wrap(~traitCat, scales='free', ncol=2) + geom_histogram() +
+  scale_y_continuous(expand = c(0,0)) + 
+  ggtitle('Histogram of species trait values extracted from original papers\nUnits standardized')
+pHist_traits_Std
+# FOR TRAITS - examine outliers
+#percN
+sub<-subset(traits.clean, traitCat == 'sp_percN' & !is.na(mean_std) & mean_std > 5)
+#sub
+paste('Excluded percN values greater than 5')
+traits.clean[traits.clean$traitID %in% sub$traitID & traits.clean$traitCat=='sp_percN',] # exclude
+exrows.percN<-which(traits.clean$traitID %in% sub$traitID & traits.clean$traitCat=='sp_percN')
+# FOR TRAITS - exclude data where necessary
+exrows<-c(exrows.percN)
+traits.clean<-traits.clean[-exrows,]
+# FOR TRAITS - re-plot histogram for the standardized trait values
+pHist_traits_Std_OR<-ggplot(data=traits.clean, aes(x=mean_std,fill=aggStatus)) + mytheme +
+  facet_wrap(~traitCat, scales='free', ncol=2) + geom_histogram() +
+  scale_y_continuous(expand = c(0,0)) + 
+  ggtitle('Histogram of species trait values extracted from original papers\nUnits standardized and outliers excluded')
+pHist_traits_Std_OR
+
+##########
+# MEASURES (ALL)
+##########
+# FOR MEASURES - clarify quality
+measures$AggYN<-rep("NoAgg", dim(measures)[1]) #No aggregation
+measures[!is.na(measures$measAggNum),'AggYN']<-"Agg" # Aggregation
+measures$UnitConvYN<-rep("NoConv", dim(measures)[1]) # No unit conversion
+measures[measures$measUnit != as.character(measures$stdunit) & !is.na(measures$stdunit),'UnitConvYN']<-"Conv" # Unit conversion
+measures$YN<-paste(measures$AggYN, measures$UnitConvYN, sep=".")
+# FOR MEASURES - streamline 'measures' dataframe
+measures.clean<-measures[,c('obsID', 'measEntryID2','measCat', 'AggYN','UnitConvYN','YN',
+                            'measUnit','stdunit', 
+                            'measInvMean','measNatMean',
+                            'measInvVar_VAR','measNatVar_VAR',
+                            'measInvN','measNatN',
+                            'stdmeanInv','stdmeanNat',
+                            'stdvarInv','stdvarNat')]
+colnames(measures.clean)[which(colnames(measures.clean) %in% c('measUnit','stdunit'))]<-c('unit', 'unit_std')
+colnames(measures.clean)[which(colnames(measures.clean) %in% c('measInvMean','measNatMean',
+                                                               'measInvVar_VAR','measNatVar_VAR',
+                                                               'stdmeanInv','stdmeanNat',
+                                                               'stdvarInv','stdvarNat'))]<-c('inv_mean','nat_mean',
+                                                                                             'inv_var','nat_var',
+                                                                                             'inv_mean_std','nat_mean_std',
+                                                                                             'inv_var_std','nat_var_std')
+colnames(measures.clean)[which(colnames(measures.clean) %in% c('measInvN','measNatN'))]<-c('inv_n', 'nat_n')
+#View(measures.clean)
+measures<-measures.clean
+
+##########
+# MEASURES (Non-STANDARDIZED UNITS)
+##########
+# FOR MEASURES (Non-STANDARDIZED UNITS) - reshape the means so that inv and nat area is 1 factor column
+df1<-measures[,c('obsID','measEntryID2','measCat','YN',
+           'inv_mean','nat_mean')] # non-standardized means
+m.df1<-melt(df1, id=c('obsID','measEntryID2','measCat','YN')) #melt
+## FOR MEASURES (Non-STANDARDIZED UNITS) - add column to differentiate between inv and nat
+m.df1$invType<-rep(NA,length(dim(m.df1)[1])) #add column to differentiate between inv and nat
+m.df1[m.df1$variable=='inv_mean','invType']<-'inv'
+m.df1[m.df1$variable=='nat_mean','invType']<-'nat'
+meas<-m.df1[,c('obsID','measEntryID2','measCat','variable','invType','YN','value')]
+# FOR MEASURES (Non-STANDARDIZED UNITS) - plot histograms
+df.sub<-subset(meas, measCat %in% c("nh","no", "toti","ammonif", "nitrif","nminz","soilmoi","som","soiln","soilcn","ph"))
+df.sub <- transform(df.sub, measCat = factor(measCat, levels=c("nh", "no", "toti","ammonif", "nitrif","nminz","soilmoi","som","soiln","soilcn","ph")))
+pHist_meas_NStd<-ggplot(data=df.sub, aes(x=value,fill=YN)) + mytheme +
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  scale_y_continuous(expand = c(0,0)) + 
+  ggtitle('Histogram of measurement values\nUnits have NOT been standardized') +
+  scale_fill_manual(name = "Name",
+                    labels = c("Aggregated & Converted", 
+                               "Aggregated",
+                               "Converted",
+                               "None"),
+                    values=c("Agg.Conv" = "purple",
+                             "Agg.NoConv" = "red",
+                             "NoAgg.Conv" = "blue",
+                             "NoAgg.NoConv" = "black"))
+pHist_meas_NStd
+#nh: none, good
+sub<-subset(meas, measCat == 'nh' & value ==0)
+#no
+sub<-subset(meas, measCat == 'no' & value < 0)
+paste('there are negative values because this is off a resin bag, so, OK')
+#toti: none, good
+sub<-subset(meas, measCat == 'toti' & value < 0)
+#ammonif
+sub<-subset(meas, measCat == 'ammonif')
+range(sub$value) #there are some really large values in here, which may be b/c units are not standardized
+#nitrif
+sub<-subset(meas, measCat == 'nitrif')
+range(sub$value) #there are some really large values in here, which may be b/c units are not standardized
+#nminz
+sub<-subset(meas, measCat == 'nminz')
+range(sub$value) #there are some really large values in here, which may be b/c units are not standardized
+#soilmoi: none, good
+sub<-subset(meas, measCat == 'soilmoi' & value < 0)
+#som: none, good
+sub<-subset(meas, measCat == 'som' & value < 0)
+sub<-subset(meas, measCat == 'som' & value > 75)
+#soiln: none, good
+sub<-subset(meas, measCat == 'soiln' & value < 0)
+#soilcn: none, good
+sub<-subset(meas, measCat == 'soilcn' & value < 0)
+#pH - looks fine
+# FOR MEASURES (Non-STANDARDIZED UNITS) - exclude data where necessary
+#NA
+
+##########
+# MEASURES (STANDARDIZED UNITS)
+##########
+# FOR MEASURES (STANDARDIZED UNITS) - reshape the unit-standardized means so that inv and nat area is 1 factor column
+df1<-measures[,c('obsID','measEntryID2','measCat','YN',
+           'inv_mean_std','nat_mean_std')] # standardized means
+m.df1<-melt(df1, id=c('obsID','measEntryID2','measCat','YN')) #melt
+# FOR MEASURES (STANDARDIZED UNITS) - add column to differentiate between inv and nat
+m.df1$invType<-rep(NA,length(dim(m.df1)[1])) #add column to differentiate between inv and nat
+m.df1[m.df1$variable=='inv_mean_std','invType']<-'inv'
+m.df1[m.df1$variable=='nat_mean_std','invType']<-'nat'
+meas<-m.df1[,c('obsID','measEntryID2','measCat','variable','invType','YN','value')]
+# FOR MEASURES (STANDARDIZED UNITS) - plot histograms
+df.sub<-subset(meas, measCat %in% c("nh","no", "toti","ammonif", "nitrif","nminz","soilmoi","som","soiln","soilcn","ph"))
+df.sub <- transform(df.sub, measCat = factor(measCat, levels=c("nh", "no", "toti","ammonif", "nitrif","nminz","soilmoi","som","soiln","soilcn","ph")))
+pHist_meas_Std<-ggplot(data=df.sub, aes(x=value, fill=YN)) + mytheme +
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of measurement values\nUnits standardized') +
+  scale_fill_manual(name = "Name",
+                    labels = c("Aggregated & Converted", 
+                               "Aggregated",
+                               "Converted",
+                               "None"),
+                    values=c("Agg.Conv" = "purple",
+                             "Agg.NoConv" = "red",
+                             "NoAgg.Conv" = "blue",
+                             "NoAgg.NoConv" = "black"))
+pHist_meas_Std
+#nh: none, good
+sub<-subset(meas, measCat == 'nh' & value < 0)
+sub<-subset(meas, measCat == 'nh' & value > 40)
+#no: none, good
+sub<-subset(meas, measCat == 'no' & value < 0)
+sub<-subset(meas, measCat == 'no' & value  > 40)
+#toti: none, good
+sub<-subset(meas, measCat == 'toti' & value < 0)
+sub<-subset(meas, measCat == 'toti' & value > 75)
+#ammonif: none, good
+sub<-subset(meas, measCat == 'ammonif' & value > 10)
+#nitrif
+sub<-subset(meas, measCat == 'nitrif' & value > 10)
+sub #these 2 observations might have very large values because of variation in incubation time length and then converting to a standard unit of time
+paste('Excluded nitrif values greater than 10')
+measures[measures$measEntryID2 %in% sub$measEntryID2 & measures$measCat=='nitrif',
+         c('inv_mean_std','nat_mean_std','inv_var_std','nat_var_std')]<-NA # exclude
+#nminz: none, good
+sub<-subset(meas, measCat == 'nminz' & value > 10)
+#soilmoi
+sub<-subset(meas, measCat == 'soilmoi' & value < 0)
+sub<-subset(meas, measCat == 'soilmoi' & value > 100)
+sub
+paste('Excluded soilmoi values greater than 100%')
+measures[measures$measEntryID2 %in% sub$measEntryID2 & measures$measCat=='soilmoi',
+         c('inv_mean_std','nat_mean_std','inv_var_std','nat_var_std')]<-NA # exclude...these values make no sense; I think that (g/g) indicates that the value is a percentage of g water/ g soil?
+#som: none, good
+sub<-subset(meas, measCat == 'som' & value < 0)
+sub<-subset(meas, measCat == 'som' & value > 75)
+#soiln
+sub<-subset(meas, measCat == 'soiln' & value < 0)
+sub<-subset(meas, measCat == 'soiln' & value > 5)
+sub
+paste('Excluded soiln values greater than 5%')
+measures[measures$measEntryID2 %in% sub$measEntryID2 & measures$measCat=='soiln',
+         c('inv_mean_std','nat_mean_std','inv_var_std','nat_var_std')]<-NA # exclude
+#soilcn: none, good
+sub<-subset(meas, measCat == 'soilcn' & value < 0)
+sub<-subset(meas, measCat == 'soilcn' & value > 60)
+#pH: looks fine
+# FOR MEASURES (STANDARDIZED UNITS) - re-do the histograms
+df1<-measures[,c('obsID','measEntryID2','measCat','YN',
+           'inv_mean_std','nat_mean_std')] # unit-standardized means
+m.df1<-melt(df1, id=c('obsID','measEntryID2','measCat','YN')) #melt
+# FOR MEASURES (STANDARDIZED UNITS) - add column to differentiate between inv and nat
+m.df1$invType<-rep(NA,length(dim(m.df1)[1]))
+m.df1[m.df1$variable=='inv_mean_std','invType']<-'inv'
+m.df1[m.df1$variable=='nat_mean_std','invType']<-'nat'
+meas<-m.df1[,c('obsID','measEntryID2','measCat','variable','invType','YN','value')]
+df.sub<-subset(meas, measCat %in% c("nh","no", "toti","ammonif", "nitrif","nminz","soilmoi","som","soiln","soilcn","ph"))
+df.sub <- transform(df.sub, measCat = factor(measCat, levels=c("nh", "no", "toti","ammonif", "nitrif","nminz","soilmoi","som","soiln","soilcn","ph")))
+# FOR MEASURES (STANDARDIZED UNITS) - base10 log-transform the following measures: nh, no, toti, soilmoi, som, soiln
+exceptions<-c('ammonif', 'nitrif','nminz','soilcn','ph')
+df.sub$value.logt<-log10(df.sub$value)
+df.sub[df.sub$measCat %in% exceptions,'value.logt']<-df.sub[df.sub$measCat %in% exceptions,'value']
+# FOR MEASURES (STANDARDIZED UNITS) - plot histogram
+pHist_meas_Std_OR<-ggplot(data=df.sub, aes(x=value.logt,fill=YN)) + mytheme +
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_fill_manual(name = "Quality",
+                    labels = c("Aggregated & Converted", 
+                               "Aggregated",
+                               "Converted",
+                               "None"),
+                    values=c("Agg.Conv" = "purple",
+                             "Agg.NoConv" = "red",
+                             "NoAgg.Conv" = "blue",
+                             "NoAgg.NoConv" = "black")) +
+  xlab('Measurement Value') + ylab('Frequency') +
+  ggtitle('Histogram of measurement values\nUnits standardized and outliers removed')
+pHist_meas_Std_OR
+```
+
+_________________________________________________________________
+# 4. EXPORT ALL
+```{r export,echo=TRUE, warning=FALSE, message=FALSE}
+# PAPERS
+newfilename<-'papers_procd.txt'
+write.table(papers, file=paste(synthdataPath,newfilename, sep='/'), sep='\t', quote=F) # the quote thing is needed so that everything doesn't get quoted in the output
+
+# OBSERVATIONS
+newfilename<-'observations_procd.txt'
+write.table(observations1, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+# SPECIES
+newfilename<-'species_procd.txt'
+write.table(species, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+# COVER
+newfilename<-'cover_procd.txt'
+write.table(cover, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+newfilename<-'pHist_cover_Std.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*1.5, height = fig.height*3, res=fig.res)
+pHist_cover_Std
+dev.off()
+
+# TRAITS
+newfilename<-'traits_procd.txt'
+write.table(traits.clean, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+newfilename<-'pHist_traits_Std.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*2.5, height = fig.height*2, res=fig.res)
+pHist_traits_Std
+dev.off()
+newfilename<-'pHist_traits_Std_OR.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*2.5, height = fig.height*2, res=fig.res)
+pHist_traits_Std_OR
+dev.off()
+
+# MEASURES
+newfilename<-'measures_procd.txt'
+write.table(measures, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+newfilename<-'pHist_meas_NStd.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3.5, height = fig.height*4, res=fig.res)
+pHist_meas_NStd
+dev.off()
+newfilename<-'pHist_meas_Std.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3.5, height = fig.height*4, res=fig.res)
+pHist_meas_Std
+dev.off()
+newfilename<-'pHist_meas_Std_OR.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3.5, height = fig.height*4, res=fig.res)
+pHist_meas_Std_OR
+dev.off()
+```
+
+
+

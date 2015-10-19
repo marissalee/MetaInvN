@@ -1,4 +1,4 @@
-#synthesis/script_cwm_3.R
+#script_cwm_3.R
 #Calculate relative abundance and ammend values to the trait*relabund dataframes
 
 

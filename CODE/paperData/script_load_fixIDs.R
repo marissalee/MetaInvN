@@ -1,4 +1,4 @@
-#rmdCode/paperData/script_load_fixIDs.R
+#CODE/paperData/script_load_fixIDs.R
 #Fix ID keys (obsID, AggNum, paperID, aggID, spID 
 
 ### A. Make keys 'obsID' and 'xAggNum' numeric in each dataset ####################################################

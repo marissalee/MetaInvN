@@ -1,4 +1,4 @@
-#paperData_synthesis/script_commUnit_try.R
+#script_commUnit_try.R
 #Assign a common unit for each cover measurement
 
 

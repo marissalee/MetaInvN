@@ -1,4 +1,4 @@
-#paperData_aggregate/fxn_InsertAgg.R
+#fxn_InsertAgg.R
 #Function to insert aggregated values into the main data table and update the variance type associated with the new variance value
 
 

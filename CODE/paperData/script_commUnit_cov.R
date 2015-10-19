@@ -1,4 +1,4 @@
-#paperData_stdUnits/script_commUnit_cov.R
+#script_commUnit_cov.R
 #Assign a common unit for each cover measurement
 
 

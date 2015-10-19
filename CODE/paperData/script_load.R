@@ -1,4 +1,4 @@
-#rmdCode/paperData/script_load.R
+#CODE/paperData/script_load.R
 #Load raw paper data
 
 ### Load helper fxns and libraries ####################################################
@@ -10,31 +10,31 @@ library(plyr)
 
 ### Load paper data ####################################################
 
-papers<-read.table("rawData/papers.txt",header=TRUE,sep="\t", fill=TRUE, quote = "", na.strings="", stringsAsFactors = FALSE) 
+papers<-read.table("DATA/papers.txt",header=TRUE,sep="\t", fill=TRUE, quote = "", na.strings="", stringsAsFactors = FALSE) 
 #View(papers)
 
-observations<-read.table("rawData/observations.txt",header=TRUE,sep="\t", fill=TRUE, na.strings="", stringsAsFactors = FALSE) 
+observations<-read.table("DATA/observations.txt",header=TRUE,sep="\t", fill=TRUE, na.strings="", stringsAsFactors = FALSE) 
 #View(observations)
 
-species<-read.table("rawData/species.txt",header=TRUE,sep="\t", na.strings="", stringsAsFactors = FALSE) 
+species<-read.table("DATA/species.txt",header=TRUE,sep="\t", na.strings="", stringsAsFactors = FALSE) 
 #View(species)
 
-measures<-read.table("rawData/measures.txt",header=TRUE,sep="\t", na.strings="", stringsAsFactors = FALSE)
+measures<-read.table("DATA/measures.txt",header=TRUE,sep="\t", na.strings="", stringsAsFactors = FALSE)
 #View(measures)
 
-measAgg<-read.table("rawData/measAgg.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE)
+measAgg<-read.table("DATA/measAgg.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE)
 #View(measAgg)
 
-cover<-read.table("rawData/cover.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
+cover<-read.table("DATA/cover.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
 #View(cover)
 
-covAgg<-read.table("rawData/covAgg.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
+covAgg<-read.table("DATA/covAgg.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
 #View(covAgg)
 
-traits<-read.table("rawData/traits.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
+traits<-read.table("DATA/traits.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
 #View(traits)
 
-traitAgg<-read.table("rawData/traitAgg.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
+traitAgg<-read.table("DATA/traitAgg.txt",header=TRUE,sep="\t", na.strings="",  stringsAsFactors = FALSE) 
 #View(traitAgg)
 
 
@@ -63,7 +63,7 @@ traitAgg <- FixNAs(traitAgg)
 
 
 ### 2. Fix ID keys (obsID, AggNum, paperID, aggID, spID ####################################################
-source('rmdCode/paperData/script_load_fixIDs.R') 
+source('CODE/paperData/script_load_fixIDs.R') 
 #TASK= makes IDs numeric, makes sure there are no dups, creates missing ID cols
 #NEEDS= observations, measures, measAgg, cover, covAgg, traits, traitAgg
 #MAKES= same as above
@@ -72,7 +72,7 @@ source('rmdCode/paperData/script_load_fixIDs.R')
 
 
 ### 3. Make sure data values numeric ####################################################
-source('rmdCode/paperData/script_load_fixNumeric.R') 
+source('CODE/paperData/script_load_fixNumeric.R') 
 #TASK= makes data cols numeric
 #NEEDS= measures, measAgg, cover, covAgg, traits, traitAgg
 #MAKES= same as above
@@ -125,7 +125,7 @@ species$Species<-sub(patter=".* ",replacement="",x=species$GenusSpecies, perl=T)
 
 
 ### 6. Closer look at the structure of 'cover' ####################################################
-source('rmdCode/paperData/script_load_checkCover.R') 
+source('CODE/paperData/script_load_checkCover.R') 
 #TASK= Make sure each observations has a cover measurement, specifically a sp_plantcov measurement. Make an expanded subset for cover measures on >1sp
 #NEEDS= cover
 #MAKES= cover.Xsp.expanded
@@ -134,7 +134,7 @@ source('rmdCode/paperData/script_load_checkCover.R')
 
 
 ### 7. Closer look at the structure of 'traits' ####################################################
-source('rmdCode/paperData/script_load_checkTraits.R') 
+source('CODE/paperData/script_load_checkTraits.R') 
 #TASK= Make an expanded subset for trait measures on >1sp
 #NEEDS= traits
 #MAKES= traits.Xsp.expandedList

@@ -1,4 +1,4 @@
-#paperData_aggregate/fxn_1_Calcs.R
+#fxn_1_Calcs.R
 #Functions to aggregate Mean, Var, N
 
 

@@ -1,9 +1,9 @@
-#synthesis/script_t1_emptyDf.R
+#script_t.R
 #Calculate the community-weighted mean for plant traits in invaded and native areas
 
 ### Load libraries and fxns ####################################################
 library(plyr) #for ddply
-source('rmdCode/cwm/fxn_FillTable_traits.R') #for FillTable, FillVarTy, SparseSumm
+source('CODE/cwm/fxn_FillTable_traits.R') #for FillTable, FillVarTy, SparseSumm
 
 
 

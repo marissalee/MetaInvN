@@ -1,8 +1,8 @@
-#synthesis/script_cwm_4.R
+#script_cwm_4.R
 #Calculate the cwm in invaded and native areas for each obsID; Keep track of associated parameters
 
 ### Load libraries and fxns ####################################################
-source('rmdCode/paperData/fxn_1_Calcs.R') #for CalcMean
+source('CODE/paperData/fxn_1_Calcs.R') #for CalcMean
 
 
 

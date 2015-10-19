@@ -1,0 +1,527 @@
+---
+title: "MIIN Part 3: Calculate effect sizes"
+author: "Marissa Lee"
+date: "June 1, 2015"
+output: pdf_document
+---
+
+**Filename: MIIN_3_calcEffectSizes.Rmd**  
+**This markdown file does the following tasks:**
+1. Clean dataframes: A) Remove observations that do not fit meta-analysis criteria that it must have least 1 focal exotic invasive species AND at least 1 nonfocal species, B) Remove ancillary soil measurements that will not be used in the meta-analysis, C) Simplify ecosystem type factor, D) Identify the N-fixing species, E) Create a character string to identify the invasive species associated with each observation ... then, F) rename all the clean dataframes
+
+2. Calculate invasion effect sizes  
+
+3. Create a composite dataset for analysis. Look at A) dataset structure, B) distribution of invasion effect size values, C) distribution of unit-standardized soil measurement values, and C) distribution of cwm trait values
+
+4. Export dataframes
+
+```{r libraries, echo=TRUE}
+knitr::opts_chunk$set(cache=TRUE)
+
+library(plyr)
+library(reshape2)
+library(ggplot2)
+library(metafor)
+
+source('CODE/mytheme.R')
+
+figuresPath<-file.path(getwd()[1], "FIGURES_TABLES", "calcES") #where to put the saved plots
+fig.height<-2.5 #inches
+fig.width<- 2.5 #inches
+fig.res<-300
+
+synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "calcES") #where to put the clean dataframes
+
+#data synthesized by *MIIN_1_paperData.Rmd*
+papers<-read.table("DATA/DATA_SYNTHESIZED/paperData/papers_procd.txt", header=TRUE, sep="\t", quote="") # the quote part is needed to deal with the odd characters inside the doi and notes
+observations<-read.table("DATA/DATA_SYNTHESIZED/paperData/observations_procd.txt", header=TRUE, sep="\t") 
+cover<-read.table("DATA/DATA_SYNTHESIZED/paperData/cover_procd.txt", header=TRUE, sep="\t") 
+species<-read.table("DATA/DATA_SYNTHESIZED/paperData/species_procd.txt", header=TRUE, sep="\t") 
+traits<-read.table("DATA/DATA_SYNTHESIZED/paperData/traits_procd.txt", header=TRUE, sep="\t") 
+measures<-read.table("DATA/DATA_SYNTHESIZED/paperData/measures_procd.txt", header=TRUE, sep="\t")
+
+#data synthesized by *MIIN_2_cwm.Rmd*
+cwm<-read.table("DATA/DATA_SYNTHESIZED/cwm/cwm.txt", header=TRUE, sep="\t")
+spIDcover<-read.table("DATA/DATA_SYNTHESIZED/cwm/spIDcover.txt", header=TRUE, sep="\t")
+spIDtraits<-read.table("DATA/DATA_SYNTHESIZED/cwm/spIDtraits.txt", header=TRUE, sep="\t")
+
+#read-in the list of Frankia and Rhizobia-associated plant genera
+nfixGenera<-read.table("DATA/NfixingPlantGenera.txt", header=TRUE, sep="\t")
+legumeGenera<-read.table("DATA/Leguminosae.csv", header=TRUE, sep=',')
+```
+
+_________________________________________________________________
+# 1. Clean dataframes
+1A. Remove observations that do not fit meta-analysis criteria that they must have least 1 focal exotic invasive species AND at least 1 nonfocal species.  Observations will be removed from 'observations' dataframe and the corresponding related data in the following dataframes: cover, species, traits, measures, cwm, papers.
+```{r removeObs,echo=TRUE, warning=FALSE, message=FALSE}
+summ.spp <- ddply(species,~obsID,summarise, 
+                  numTotalspp=length(obsID), 
+                  numInvspp=sum(spInvasive=='invasive' & spExotic=='exotic' & spFocal=='focal'), 
+                  numNonFocalspp=sum(spFocal=='not focal'))
+exclude.1inv<-summ.spp[summ.spp$numInvspp == 0,'obsID']
+exclude.1nonfoc<-summ.spp[summ.spp$numNonFocal == 0,'obsID']
+exclude.tmp<-c(exclude.1inv,exclude.1nonfoc)
+exclude.obsID<-unique(exclude.tmp)
+
+paste('Exclude',length(exclude.obsID), 'observations because there is not at least 1 species that is invasive, exotic, AND focal')
+
+#identify the ok obsIDs
+observations1<-observations[!observations$obsID %in% exclude.obsID,]
+obsOK<-unique(observations1$obsID)
+paste('There are',length(obsOK), 'observations remaining in the dataset that have at least 1 species that is invasive, exotic, AND focal')
+
+#subset the remaining dfs from paperData
+cover1<-subset(cover, obsID %in% obsOK)
+species1<-subset(species, obsID %in% obsOK)
+traits1<-subset(traits, obsID %in% obsOK)
+measures1<-subset(measures, obsID %in% obsOK)
+
+#subset the dfs from cwm
+cwm1<-subset(cwm, obsID %in% obsOK)
+spTOobs<-function(df){ #first, need to convert the spID to an obsID column in these dfs
+  tmp<-ldply(strsplit(as.character(df[,'spID']), ".", fixed=T))
+  df[,'obsID']<-paste(tmp[,1],tmp[,2], sep=".")
+  return(df)
+}
+spIDcover<-spTOobs(spIDcover)
+spIDtraits<-spTOobs(spIDtraits)
+spIDcover1<-subset(spIDcover, obsID %in% obsOK)
+spIDtraits1<-subset(spIDtraits, obsID %in% obsOK)
+
+#annotate papers dataframe to reflect removal of observations and thus papers
+#identify which observations in the exclude list come from papers that had OK'd observations
+exclude.p1<-ldply(strsplit(as.character(exclude.obsID), ".", fixed=T))[,1]
+include.p1<-ldply(strsplit(as.character(obsOK), ".", fixed=T))[,1]
+reject.p<-unique(exclude.p1[!exclude.p1 %in% include.p1]) #if FALSE, then label these paperIDs as rejects
+papers[papers$paperID %in% reject.p,'reject']<-'Yes'
+newRationale<-'Not at least 1 species that is invasive, exotic, AND focal'
+papers$rejectRationale<-factor(papers$rejectRationale, levels=c(levels(papers$rejectRationale),newRationale))
+papers[papers$paperID %in% reject.p,'rejectRationale']<-newRationale
+papers1<-papers
+```
+1B. Remove ancillary soil measurements that will not be used in the meta-analysis. 
+```{r removeMeas,echo=TRUE, warning=FALSE, message=FALSE}
+summ.meas <- ddply(measures1,~measCat,summarise, numObs=length(unique(obsID)))
+summ.meas
+paste('Remove these measurement types because there are very few observations')
+summ.meas[summ.meas$numObs < 12,]
+measOK<-summ.meas[!summ.meas$numObs <12,'measCat']
+
+#subset the remaining dfs from paperData
+measures2<-subset(measures1, measCat %in% measOK)
+measures3 <- droplevels(measures2)
+```
+1C. Simplify ecosystem type factor
+The 'other' category now consists of studies that took place in a dune system, or some combination of forest, grassland, wetland
+```{r simpEco,echo=TRUE, warning=FALSE, message=FALSE}
+summ.obs.eco <- ddply(observations1,~ecosystCat,summarise, 
+                      numObs=length(paperID), 
+                      numPapers=length(unique(paperID)))
+summ.obs.eco
+
+#limit ecosystem categories to forest, grassland, shrubland, wetland, and other
+criteria<-observations1$ecosystCat == 'forest,grassland' | 
+  observations1$ecosystCat == 'forest,grassland,wetland' | 
+  observations1$ecosystCat == 'dune'
+levels(observations1$ecosystCat) <- c(levels(observations1$ecosystCat), "other")
+observations1[criteria,'ecosystCat']<-'other'
+```
+1D. Identify the N-fixing plant species
+```{r idNfixers,echo=TRUE, warning=FALSE, message=FALSE}
+#pull the unique legume genuses and combine with the full list of Frankia and Rhizobia associated plant genera
+LegGenera<-unique(legumeGenera$Genus)
+nfixGenera.sub<-nfixGenera[!nfixGenera$plantFamily =='Leguminosae','plantGenera']
+nfixGenera.complete<-c(as.character(LegGenera),as.character(nfixGenera.sub))
+
+#select rows in 'species' dataframe based on whether the species' genus name is present in nfixGenera.complete
+species1$nfixGenus<-'No' #fill everything in with 'No' first
+species1[species1$Genus %in% nfixGenera.complete,'nfixGenus']<-'Yes'
+numNfixRows<-dim(species1[species1$Genus %in% nfixGenera.complete,])[1] 
+numNonNfixRows<-dim(species1[!species1$Genus %in% nfixGenera.complete,])[1]
+paste('There are', numNfixRows, 'and',numNonNfixRows, 'species entries (species unique to each observation) that are N-fixing and non-N-fixing, respectively')
+
+#identify observations based on presence/absence of legume as invasive species
+selection<-species1$spInvasive == 'invasive' & species1$spExotic == 'exotic' & species1$spFocal == 'focal' & species1$nfixGenus == 'Yes'
+df.selection<-species1[selection,]
+NfixObsIDs<-unique(df.selection$obsID)
+observations1$InvNfix<-'Non-N-fixing' #fill everthing with 'Non-N-fixing' first
+observations1[observations1$obsID %in% NfixObsIDs,'InvNfix']<-'N-fixing'
+numNfixRows<-sum(observations1$InvNfix == 'N-fixing')
+numNonNfixRows<-sum(observations1$InvNfix != 'N-fixing')
+paste('There are', numNfixRows, 'and',numNonNfixRows, 'observations that have N-fixing and non-N-fixing invasive species, respectively')
+
+#identify observations based on % native legume species (not cover)
+df.notFocal<-species1[species1$spFocal == 'not focal',]
+summ.Nfix <- ddply(df.notFocal,~obsID,summarise,
+                     NatnumNfix=sum(nfixGenus=='Yes'), 
+                     NatnumNotNfix=sum(nfixGenus=='No'),
+                  NatpercNfix=(NatnumNfix/(NatnumNfix + NatnumNotNfix))*100)
+summ.Nfix$NatNfix<-'No N-fixers' #fill everthing with 'No N-fixers' first
+summ.Nfix[summ.Nfix$NatnumNfix > 0,'NatNfix']<-'N-fixers present'
+numNfixRows<-sum(summ.Nfix$NatNfix == 'N-fixers present')
+numNonNfixRows<-sum(summ.Nfix$NatNfix != 'N-fixers present')
+paste('There are', numNfixRows, 'and',numNonNfixRows, 'observations that have reference areas with N-fixers present and No N-fixers present, respectively')
+
+observations2<-merge(observations1, summ.Nfix, by='obsID')
+```
+1E. Create a character string to identify the invasive species associated with each observation  
+```{r idInvSp,echo=TRUE, warning=FALSE, message=FALSE}
+#create an obsID x invasive species dataframe
+species.tmp<-subset(species1, spInvasive=='invasive' & spExotic=='exotic' & spFocal=='focal')
+OBSID<-unique(species.tmp$obsID)
+bindedrows<-numeric(0)
+i<-0
+for(i in 1:length(OBSID)){
+  invGenera<-paste(species.tmp[species.tmp$obsID == OBSID[i],'Genus'], collapse='_')
+  nspecies<-length(species.tmp[species.tmp$obsID == OBSID[i],'Genus'])
+  if(nspecies > 2){
+    invGenera<-'>2spp'
+  }
+  row<-data.frame(obsID=OBSID[i], invGenera)
+  bindedrows<-rbind(bindedrows,row)
+}
+species.tmp2<-bindedrows
+#View(species.tmp2)
+
+#merge by obsID to add invasive species name to observations table
+observations3<-merge(observations2, species.tmp2, by='obsID')
+```
+1F. Rename all the clean dataframes
+```{r rename,echo=TRUE, warning=FALSE, message=FALSE}
+papers.c<-papers1
+observations.c<-observations3
+cover.c<-cover1
+species.c<-species1
+traits.c<-traits1
+measures.c<-measures3
+cwm.c<-cwm1
+spIDcover.c<-spIDcover1
+spIDtraits.c<-spIDtraits1
+```
+
+_________________________________________________________________
+# 2. Calculate invasion effect sizes and create a composite dataset for analyses (observations, measures, cwm)
+To calculate invasion effect sizes, use measurement values that have not been unit-standardized.  Calculate effect sizes using the "standard mean difference" (SMD).
+```{r calcES,echo=TRUE, warning=FALSE, message=FALSE}
+chooseMeasType<-'nonSTD' #decide whether to use standardized/non-standardized soil measurement values
+chooseESType<-'SMD' #decide whether to use ROM or SMD to calculate effect sizes
+
+### Data that will be used ######################################################
+#observations.c
+#measures.c
+#cwm.c
+
+### Calculate measurement ESs ######################################################
+
+#study identifiers
+obsID<-measures.c$obsID
+measCat<-measures.c$measCat
+measQuality<-measures.c$YN
+
+#invader impact measures - standardized units
+n1i<-measures.c$inv_n
+m1i<-measures.c$inv_mean_std
+sd1i<-sqrt(measures.c$inv_var_std)
+n2i<-measures.c$nat_n
+m2i<-measures.c$nat_mean_std
+sd2i<-sqrt(measures.c$nat_var_std)
+
+dat.STD<-data.frame(obsID, measCat, measQuality,
+                    n1i, m1i, sd1i, n2i, m2i, sd2i)
+
+#invader impact measures - non-standardized units
+m1i<-measures.c$inv_mean
+sd1i<-sqrt(measures.c$inv_var)
+m2i<-measures.c$nat_mean
+sd2i<-sqrt(measures.c$nat_var)
+
+dat.nonSTD<-data.frame(obsID, measCat, measQuality,
+                       n1i, m1i, sd1i, n2i, m2i, sd2i)
+
+
+### Combine the selected measurement ES values with the observation ID modifiers ######################################################
+if(chooseMeasType == 'STD'){dat<-dat.STD}
+if(chooseMeasType == 'nonSTD'){dat<-dat.nonSTD}
+
+#add obsID factor columns to measures
+dat.obs<-merge(dat,observations.c, by='obsID')
+#dim(dat);dim(dat.obs) #should more columns, but same number of rows
+#colnames(dat.obs) #get rid of unnecessary columns
+dat.obs1<-dat.obs[,c('paperID','obsID','measCat',
+                 'n1i', 'm1i', 'sd1i', 'n2i', 'm2i', 'sd2i',
+                 'measQuality',
+                 'ecosystCat','studyType','InvNfix','NatNfix','invGenera')]
+
+
+### Re-organize cwm data and prep for merging ######################################################
+#recast cwm so that type of CWM values are in the same row
+cwm.tmp<-cwm.c[,c('obsID','traitCat','invType','qualRank','cwm')]
+m.cwm.tmp<-melt(cwm.tmp, id.vars=c('obsID', 'traitCat','invType'))
+c.cwm.tmp<-dcast(m.cwm.tmp, obsID+traitCat~invType+variable)
+#View(c.cwm.tmp)
+
+#calculate the raw difference of invaded and native area cwm trait values
+c.cwm.tmp$CWMDiff_cwm<-c.cwm.tmp$InvArea_cwm - c.cwm.tmp$NatArea_cwm
+
+### Combine the selected measurement ES values and obsID info with CWM data ######################################################
+#add cwm data to measures
+#View(dat.obs1) #each row is a unique obsID x measCat
+#View(c.cwm.tmp) #each row is a unique obsID x traitCat
+dat.all<-merge(dat.obs1, c.cwm.tmp, by='obsID', all=TRUE)
+#dim(dat.all)
+#paste(length(unique(dat.obs1$obsID)), 'observations') #check to make sure that observations did not get dropped
+#paste(length(unique(dat.all$obsID)), 'observations')
+
+### Calculate the effect sizes ######################################################
+dat1 <- escalc(measure=chooseESType, m1i=m1i, sd1i=sd1i, n1i=n1i, m2i=m2i, sd2i=sd2i, n2i=n2i, data=dat.all) 
+#head(dat1)
+```
+
+_________________________________________________________________
+# 3. Now that we have a composite dataset for analysis. Look at... 
+3A. Dataset structure
+```{r dataStr, echo=TRUE, warning=FALSE, message=FALSE}
+#summarize dataset by unique obsID+measCats so that data is not duplicated (multiple traits per obsID+measCat)
+summ<-ddply(dat1, ~obsID+measCat, summarize,
+      uniqm1i = length(unique(m1i)),
+      uniqm2i = length(unique(m2i)),
+      uniqyi = length(unique(yi)),
+      total = sum(uniqm1i, uniqm2i,uniqyi))
+sum(summ$total != 3) # if 0, then obsID + measCat produces all unique rows
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i),
+                 m2i = unique(m2i),
+                 yi = unique(yi))
+head(dat1.meas) #each row is a unique obsID x measCat
+
+#summarize dataset by unique obsID+traitCats so that data is not duplicated (multiple measures per obsID+traitCat)
+summ<-ddply(dat1, ~obsID+traitCat, summarize,
+      uniqInvArea = length(unique(InvArea_cwm)),
+      uniqInvSpInvArea = length(unique(InvSpInvArea_cwm)),
+      uniqNatArea = length(unique(NatArea_cwm)),
+      uniqCWMDiff = length(unique(CWMDiff_cwm)),
+      total = sum(uniqInvArea, uniqInvSpInvArea,uniqNatArea,uniqCWMDiff))
+sum(summ$total != 4) # if 0, then obsID + traitCat produces all unique rows
+dat1.tr<-ddply(dat1, ~obsID+traitCat, summarize,
+               InvArea = unique(InvArea_cwm),
+               InvSpInvArea = unique(InvSpInvArea_cwm),
+               NatArea = unique(NatArea_cwm),
+               CWMDiff = unique(CWMDiff_cwm))
+head(dat1.tr) #each row is a unique obsID x traitCat
+
+#summarize dataset by unique obsID+traitCats+variable (where variable == c(InvArea, InvSpInvArea, NatArea, CWMDiff)
+m.dat1.tr<-melt(dat1.tr, id.vars=c('obsID', 'traitCat')) 
+head(m.dat1.tr) #each row is a unique obsID x traitCat x variable
+sum(is.na(m.dat1.tr$traitCat)) #combination is not fully factorial, so there are NAs here
+sum(is.na(m.dat1.tr$value)) #combination is not fully factorial, so there are NAs here
+m.dat1.tr1<-m.dat1.tr[!is.na(m.dat1.tr$value),] #get rid of the NAs
+```
+3B. Distribution of effect size values
+```{r distES, echo=TRUE, warning=FALSE, message=FALSE}
+pHist_ES<-ggplot(dat1.meas, aes(x=yi)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of effect size values')
+
+newfilename<-'pHist_ES.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_ES
+dev.off()
+
+#get rid of outliers
+#nh
+dat1[dat1$measCat=='nh' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='nh' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+#no
+dat1[dat1$measCat=='no' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='no' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+#ph
+dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+#soiln
+dat1[dat1$measCat=='soiln' & dat1$yi > 30 & !is.na(dat1$yi),]
+dat1[dat1$measCat=='soiln' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+
+#update and re-plot
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i),
+                 m2i = unique(m2i),
+                 yi = unique(yi))
+pHist_ES_OR<-ggplot(dat1.meas, aes(x=yi)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of effect size values\nOutliers removed')
+pHist_ES_OR
+
+paste('Removed outlier effect size values in nh, no, ph, soiln.')
+paste('Effect size values look normally-distributed - except cn, littercn, litterpercN, probably because there was not very much data')
+
+newfilename<-'pHist_ES_OR.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_ES_OR
+dev.off()
+```
+3C. Distribution of unit-standardized soil measurement values
+```{r distMeas, echo=TRUE, warning=FALSE, message=FALSE}
+#m1i (invaded area soil measurements)
+pHist_measInv<-ggplot(dat1.meas, aes(x=m1i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of invaded area soil measurement values')
+pHist_measInv
+newfilename<-'pHist_measInv.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_measInv
+dev.off()
+
+#m2i (reference area soil measurements)
+pHist_measRef<-ggplot(dat1.meas, aes(x=m2i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of reference area soil measurement values')
+pHist_measRef
+newfilename<-'pHist_measRef.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_measRef
+dev.off()
+
+#Log-transform some measurements
+logtMeas<-c('nh','no','toti','soilmoi','som','soiln', 'biom', 'litterbiom','littercn', 'litterpercN','percN')
+paste('Log-transform the following soil measurement values to improve normality:',paste(logtMeas, collapse=', '))
+nologtMeas<-unique(dat1$measCat)[!unique(dat1$measCat) %in% logtMeas]
+SD.logt<-function(meanval, sdval){ #function that corrects the variance values associated with each observation mean value that is log-transformed
+  varval<-(sdval)^2
+  sd.logt<-sqrt(log10(1+varval/(meanval)^2))
+  return(sd.logt)
+}
+dat1$m1i_logt<-log10(dat1$m1i) #warning message about NaNs is because of negative rate values
+dat1$sd1i_logt<-SD.logt(meanval=dat1$m1i, sdval=dat1$sd1i)
+dat1$m2i_logt<-log10(dat1$m2i)
+dat1$sd2i_logt<-SD.logt(meanval=dat1$m2i, sdval=dat1$sd2i)
+#put the non-transformed data back into measures that shouldn't be transformed
+dat1[dat1$measCat %in% nologtMeas,'m1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m1i']
+dat1[dat1$measCat %in% nologtMeas,'sd1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd1i']
+dat1[dat1$measCat %in% nologtMeas,'m2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m2i']
+dat1[dat1$measCat %in% nologtMeas,'sd2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd2i']
+
+#update and re-plot
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i_logt),
+                 m2i = unique(m2i_logt),
+                 yi = unique(yi))
+
+pHist_measInv_T<-ggplot(dat1.meas, aes(x=m1i)) + 
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of InvArea unit-std soil meas. values\nLog-transformed')
+newfilename<-'pHist_measInv_T.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_measInv_T
+dev.off()
+
+pHist_measRef_T<-ggplot(dat1.meas, aes(x=m2i)) + 
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of NatArea unit-std soil meas. values\nLog-transformed')
+newfilename<-'pHist_measRef_T.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_measRef_T
+dev.off()
+
+#get rid of outliers
+#ammonif
+dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
+dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+#dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
+
+
+#nitrif
+dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
+dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+#dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
+
+#nminz
+dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),]
+dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+#dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m2i_logt),]
+
+#update and re-plot
+dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+                 m1i = unique(m1i_logt),
+                 m2i = unique(m2i_logt),
+                 yi = unique(yi))
+
+pHist_measInv_T_OR<-ggplot(dat1.meas, aes(x=m1i)) + 
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of InvArea unit-std soil meas. values\nLog-transformed and outliers removed')
+pHist_measInv_T_OR
+newfilename<-'pHist_measInv_T_OR.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_measInv_T_OR
+dev.off()
+
+pHist_measRef_T_OR<-ggplot(dat1.meas, aes(x=m2i)) + 
+  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of NatArea unit-std soil meas. values\nLog-transformed and outliers removed')
+pHist_measRef_T_OR
+newfilename<-'pHist_measRef_T_OR.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_measRef_T_OR
+dev.off()
+
+paste('Removed outlier effect size values in ammonif, nitrif, nminz.')
+paste('Most unit-std soil meas. values look normally-distributed after log-transforming some measurement types - except cn, litterbiom, littercn, litterpercN, probably because there was not very much data')
+```
+3D. Distribution of CWM trait values
+```{r distCWM, echo=TRUE, warning=FALSE, message=FALSE}
+pHist_cwm<-ggplot(m.dat1.tr1, aes(x=value)) + facet_wrap(~traitCat+variable, scales='free', ncol=4) + geom_histogram() +
+  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of cwm trait values or difference values')
+pHist_cwm
+newfilename<-'pHist_cwm.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+pHist_cwm
+dev.off()
+
+paste('No outliers removed at this point, but see MIIN_2_cwm.Rmd')
+paste('Most cwm values look normally-distributed - except littercn, probably because there was not very much data')
+```
+
+_________________________________________________________________
+# 4. Export dataframes
+```{r exportData,echo=TRUE, warning=FALSE, message=FALSE}
+newfilename<-'papers.txt'
+write.table(papers.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'observations.txt'
+write.table(observations.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'cover.txt'
+write.table(cover.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'species.txt'
+write.table(species.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'traits.txt'
+write.table(traits.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'measures.txt'
+write.table(measures.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'cwm.txt'
+write.table(cwm.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'spIDcover.txt'
+write.table(spIDcover.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+newfilename<-'spIDtraits.txt'
+write.table(spIDtraits.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+colnames(dat1)
+newfilename<-'metaDataset.txt'
+write.table(dat1, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+```
+
+
+
+

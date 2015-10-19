@@ -1,0 +1,333 @@
+---
+title: "MIIN Part 2: calculate CWMs"
+author: "Marissa Lee"
+date: "June 1, 2015"
+output: pdf_document
+---
+
+**Filename: MIIN_2_cwm.Rmd**  
+**This markdown file does the following tasks:**
+1. Prep trait data: a) Convert TRY trait data to standardized units, b) Aggregate TRY trait data by paper species and genus, c) Create a traits-by-spID matrix
+
+2. Prep cover data: a) Estimate individual species cover values based on cumulative species cover values, b) Create a cover-by-spID matrix
+  
+3. Calculate community-weighted means (CWM): a) Merge the trait and cover matrices, b) eliminate observations that do not meet the minimum criteria needed to calculate CWM value, c) calculate species' relative abundances, d) calculate cwm values for each trait type
+
+4. Annotate how each CWM value varies in quality
+
+4. Clean
+
+5. Export to DATA_SYNTHESIZED/cwm folder
+
+```{r libraries, echo=TRUE}
+knitr::opts_chunk$set(cache=TRUE)
+
+library(ggplot2)
+library(gridExtra)
+library(reshape2)
+
+source('CODE/mytheme.R')
+
+figuresPath<-file.path(getwd()[1], "FIGURES_TABLES", "cwm") #where to put the saved plots
+fig.height<-2.5 #inches
+fig.width<- 2.5 #inches
+fig.res<-300
+
+synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "cwm") #where to put the clean dataframes
+
+#data synthesized by *MIIN_1_paperData.Rmd*
+observations<-read.table("DATA/DATA_SYNTHESIZED/paperData/observations_procd.txt", header=TRUE, sep="\t") 
+cover<-read.table("DATA/DATA_SYNTHESIZED/paperData/cover_procd.txt", header=TRUE, sep="\t") 
+species<-read.table("DATA/DATA_SYNTHESIZED/paperData/species_procd.txt", header=TRUE, sep="\t") 
+traits<-read.table("DATA/DATA_SYNTHESIZED/paperData/traits_procd.txt", header=TRUE, sep="\t") 
+measures<-read.table("DATA/DATA_SYNTHESIZED/paperData/measures_procd.txt", header=TRUE, sep="\t") 
+
+#data synthesized by *MIIN_1_tryData.Rmd*
+tryDataT<-read.table("DATA/DATA_SYNTHESIZED/tryData/tryDataT.txt", header=TRUE, sep="\t") 
+tryData_traitKey<-read.table("DATA/DATA_SYNTHESIZED/tryData/tryData_traitKey.txt", header=TRUE, sep="\t") 
+```
+
+_________________________________________________________________
+# 1. PREP TRAIT DATA
+1A. Convert traits within *TRY* data to common units selected for the analogous paper traits.
+```{r trait_prep,echo=TRUE, message=FALSE, warning=FALSE}
+source('CODE/cwm/script_TRYstdUnits.R') # TASK= Convert TRY data to the common units used for paper traits; NEEDS= tryData_traitKey, tryDataT; MAKES= tryDataT.cu
+#tryDataT.cu[1:10,c('StdValue','stdmean','Unit_UnitName','stdunit')]
+```
+1B. Aggregate *TRY* data by paper species and genus.  Average multiple entries for the same trait and species/genus.
+```{r trait_agg,echo=TRUE, message=FALSE, warning=FALSE}
+source('CODE/cwm/script_traitBySpecies.R') # TASK= Pulls relavant TRY data and creates a species x trait table; NEEDS= tryData_traitKey, tryDataT, species; MAKES= tryGS.summ, tryGX.summ
+#Don't worry about these warning messages
+#nGS<-ddply(tryGS.summ, ~AccGenusSpecies+traitOI, summarise,n=length(AccGenusSpecies))
+#max(nGS$n) #ok, no species x traitCats repeated
+#nGX<-ddply(tryGX.summ, ~AccGenus+traitOI, summarise,n=length(AccGenus))
+#max(nGX$n) #ok, no species x traitCats repeated
+```
+1C. Create a *Traits x spID* matrix
+```{r trait_empty,echo=TRUE, message=FALSE, warning=FALSE}
+# 1. Start with an empty spID (rows) x traits (cols) dataframe.  Include all species recorded from papers.  Include traitsOfInterest (mean, var, n, unit, varty).
+# 2. Fill the emptyDf with info from different sources/different qualities: 
+#     A. from within the original paper
+#     B. from TRY data to the species level
+#     C. from TRY data to the genus level
+# 3. Sequentially merge the dataframes in order of the quality of the data, so that the higher quality data is never replaced by lower quality data.
+# 4. Finish with a table that has as much data as possible (preferentially keeping the high quality data) and has an index of source for each piece of data in the datatable.
+# 5. Save the dataframe spIDtraits
+source('CODE/cwm/script_t.R') # TASK= see above; NEEDS= species, traits, tryGS.summ, tryGX.summ; MAKES= spIDtraits
+#spIDtraits[1:10,c('spID','GenusSpecies','mean_cn','quality_mean_cn')]
+#spNam<-spIDtraits[1:10,c('Genus')]
+#tryGX.summ[tryGX.summ$Genus %in% spNam,]
+
+newfilename<-'spIDtraits.txt'
+write.table(spIDtraits, file=paste(synthdataPath,newfilename, sep='/'), sep='\t') #will need to use this in 'summary.Rmd' to make a quality plot
+```
+
+_________________________________________________________________
+# 2. PREP COVER DATA
+2A. Estimate species cover in invaded and native areas for papers that present *multi-species cover values*
+```{r cover_prep,echo=TRUE, message=FALSE, warning=FALSE}
+#Remember that...Var(aX) = a^2 * Var(X)
+source('CODE/cwm/script_spcover.R') # TASK= Calcuate species cover if possible; NEEDS= observations, cover, species; MAKES= cover.sp
+#tmp<-cover.sp[cover.sp$covNumSpp == '>1 species' ,c('obsID','covInvasive','covSpEntryID','covNumSpp','covUnit','covInvMean','covNatMean','stdmeanInv','stdmeanNat','numsp', 'GenusSpecies')]
+#head(tmp)
+```
+2B. Create a *Cover x spID* matrix
+```{r cover_empty,echo=TRUE, message=FALSE, warning=FALSE}
+# 1. Start with an empty spID (rows) x cover (cols) dataframe. Include all species recorded from papers. Include invaded and native cover (mean, var, n, unit, varty, quality: number of species, quality: measured in the paper ('measured') or based on study description (BOSD).
+# 2. Fill the emptyDf with info from cover.sp
+# 3. Finish with a table that has spID (species) x cover data and has an index of the quality of the cover data.
+source('CODE/cwm/script_c.R') # TASK= see above; NEEDS= species, cover.sp; MAKES= spIDcover
+#View(spIDcover)
+
+newfilename<-'spIDcover.txt'
+write.table(spIDcover, file=paste(synthdataPath,newfilename, sep='/'), sep='\t') #will need to use this in 'summary.Rmd' to make a quality plot
+```
+
+_________________________________________________________________
+# 3. CALCULATE COMMUNITY-WEIGHTED MEANS (CWM)
+3A. For each trait type, merge the trait and cover matrices by spID, then subset by *minimum data requirements*, which are...
+ObsID must have at least 1 invasive species AND 1 native species that each have all of the following types of data: A) mean trait value for the traitOfInterest, B) mean species' cover in invaded area, C) mean species' cover in native area
+```{r calc_prep,echo=TRUE, message=FALSE, warning=FALSE}
+traitsOfInterest<-c('cn', 'percN', 'littercn', 'litterpercN')
+source('CODE/cwm/script_cwm_1.R') # TASK = Binds spIDtraits and spIDcover and determines spID that fit data requirements, preps trait*relabund dataframes; NEEDS= traitsOfInterest, spIDtraits and spID cover; MAKES= df.list
+#str(df.list)
+#View(df.list[['cn']])
+```
+3B. Calculate the *relative abundance* for each spID in that obsID
+The relative abundance of each spID is based on the total percent cover in the invaded/native area of that observation. The relative abundances of all spIDs in that obsID should sum to 100%, even if the species covers do not sum to 100%. Note: Spcover values of the spIDs in an obsID might not sum to 100% if ... A) Not all of the species were measured, B) Bareground was included in the measurement, C) Cover values were measured at multiple levels - the understory and canopy
+```{r calc_relabund,echo=TRUE, message=FALSE, warning=FALSE}
+source('CODE/cwm/script_cwm_2.R') # TASK= Calculates the relative abundance for each spID and ammends to each trait dataframe; NEEDS= spIDsyn1, df.list; MAKES= df.list2
+#View(df.list2[['cn']])
+#str(df.list2)
+```
+3C. Calculate the *community-weighted trait mean* for each obsID (invaded area cwm, native area cwm, invasive species invaded area). DEFINITION: a community weighted mean value (hereafter CWM) can be calculated for each trait as the mean of trait values in the community, weighted by the relative abundance of the species carrying each value (Violle C, Navas ML, Vile D, Kazakou E, Fortunel C, Hummel I, Garnier E (2007) Oikos)
+```{r calc_cwm,echo=TRUE, message=FALSE, warning=FALSE}
+### make it so obsID has it own column
+source('CODE/cwm/script_cwm_3.R') # TASK= Calculates the CWM in invaded and native areas for each obsID; NEEDS= df.list2; MAKES= cwm.list
+#it is safe to ignore warnings about duplicated row names
+#str(cwm.list)
+```
+3D. Merge spID-calculated and paper-reported CWM values into 1 CWM dataframe sequentially by quality
+```{r merge_dfs,echo=TRUE, message=FALSE, warning=FALSE}
+# 1. Determine the number of observations that report CWM trait values for invaded and native areas.
+# 2. Start with an empty obsID (rows) x cwm traits (cols) dataframe. Include trait value quality metrics as columns too.  The important quality metrics include:
+#     A. Number of species included with cover values based on (i) 1 OR (ii) more than 1 species
+#     B. Number of species included with cover values (i) measured within the paper OR (ii) esmiated based on the study description (BOSD)
+#     C. Number of species included with trait values (i) reported within the paper OR (ii) from species-aggregated TRY data OR (iii) from genus-aggregated TRY data
+# 3. Sequentially merge the dataframe of spID-calculated CWMs and the paper-reported CWMs: paper-reported CWMs take presidence.
+# 4. Finish with a table that has as much data as possible (preferentially keeping the high quality data) and has an index of source for each piece of data in the datatable.
+source('CODE/cwm/script_cwm_4.R') # TASK= Merges CWM reported within studies with those that were calculated; NEEDS= meas_stdunits, cwm.list; MAKES= cwm.r.list
+#View(cwm.r.list[[1]])
+```      
+
+_________________________________________________________________
+# 4. ANNOTATE QUALITY
+There are 4 ways in which the quality of a CWM value may be diminished:  
+
+1) The relative abundance of some species in the community were not available and I had to assume in some cases that species' relative abundances were equal across the species list provided (percMeasCov = Percent of species included in a CWM with measured cover values)  
+
+2) The relative abundance of some species in the community may be estimated from a multi-species cover value, rather than measured on a species-basis in the original study (perc1spCov = Percent of species included in a CWM with species-specific cover values (values can be measured or BOSD))  
+
+3) Trait data from some species in the community were not reported in the original paper (percOrigTr = Percent of species included in a CWM that were represented with trait data presented in the original paper)  
+
+4) Trait data from some species in the community were not even represented with trait data found in species-specific TRY database, only genus-specific (percTryGS = Percent of species included in a CWM that were represented with trait data found in species-specific TRY database)  
+
+```{r clean2,echo=TRUE, message=FALSE, warning=FALSE, include=FALSE}
+# calculated values only
+cwm_calculated<-ldply(cwm.list, data.frame)
+colnames(cwm_calculated)[1]<-'traitCat'
+#View(cwm_calculated)
+
+# calculated values replaced by reported values -- use this one
+cwm_withReported<-ldply(cwm.r.list, data.frame)
+colnames(cwm_withReported)[1]<-'traitCat'
+#View(cwm_withReported)
+df<-cwm_withReported #use this one
+#View(df)
+
+#identify the identifying columns in df
+nSpCols<-paste(rep(c('invadedArea','nativeArea'),2),rep(c('invasiveSp','nativeSp'), each=2), sep="_")
+idcols<-c('obsID','traitCat','var','nTr','unit','relabund_note',nSpCols,'cwmCalc') 
+
+#melt down the cwm values and the quality data
+#colnames(df)[!colnames(df) %in% idcols] #melted columns
+m.df<-melt(df, id.vars=idcols) #melt
+#colnames(m.df) #new cols
+
+#add column to differentiate between inv and nat in variable column
+m.df$invType<-rep(NA,length(dim(m.df)[1])) 
+m.df[grepl('_InvArea',m.df$variable),'invType'] <- 'InvArea'
+m.df[grepl('_NatArea',m.df$variable),'invType'] <- 'NatArea'
+m.df[grepl('_InvSpInvArea',m.df$variable),'invType'] <- 'InvSpInvArea'
+
+#add column to differentiate between mean, nSp, nMeasCov, nBOSDCov, n1spCov, nXspCov, nOrigTr, nTryGS, nTryGX
+m.df$valueType<-rep(NA,length(dim(m.df)[1])) 
+m.df[grepl('mean_',m.df$variable),'valueType'] <- 'mean'
+m.df[grepl('nSp_',m.df$variable),'valueType'] <- 'nSp'
+m.df[grepl('nMeasCov_',m.df$variable),'valueType'] <- 'nMeasCov'
+m.df[grepl('nBOSDCov_',m.df$variable),'valueType'] <- 'nBOSDCov'
+m.df[grepl('n1spCov_',m.df$variable),'valueType'] <- 'n1spCov'
+m.df[grepl('nXspCov_',m.df$variable),'valueType'] <- 'nXspCov'
+m.df[grepl('nOrigTr_',m.df$variable),'valueType'] <- 'nOrigTr'
+m.df[grepl('nTryGS_',m.df$variable),'valueType'] <- 'nTryGS'
+m.df[grepl('nTryGX_',m.df$variable),'valueType'] <- 'nTryGX'
+
+#cast so that each row is an obsID
+c.df<-dcast(m.df, obsID + traitCat + invType + 
+              invadedArea_invasiveSp + nativeArea_invasiveSp + invadedArea_nativeSp + nativeArea_nativeSp +
+              cwmCalc ~ 
+              valueType)
+#View(c.df)
+
+#calculate % coverage
+c.df$percMeasCov<-c.df$nMeasCov / c.df$nSp * 100 #calc perc cover measured
+c.df$perc1spCov<-c.df$n1spCov / c.df$nSp * 100 #calc perc 1 sp measured
+c.df$percOrigTr<-c.df$nOrigTr / c.df$nSp * 100 #calc perc orig trait data
+c.df$percTryGS<-c.df$nTryGS / c.df$nSp * 100 #calc perc species trait data
+
+#check out the distribution of data quality values 
+p1<-ggplot(c.df, aes(x=percMeasCov)) + 
+  geom_histogram() + mytheme + scale_y_continuous(expand = c(0,0)) + scale_x_continuous(expand = c(0,0))  #0, >0 and <100, 100
+p2<-ggplot(c.df, aes(x=perc1spCov)) + 
+  geom_histogram() + mytheme + scale_y_continuous(expand = c(0,0)) + scale_x_continuous(expand = c(0,0)) #0, >0 and <100, 100
+p3<-ggplot(c.df, aes(x=percOrigTr)) + 
+  geom_histogram() + mytheme + scale_y_continuous(expand = c(0,0)) + scale_x_continuous(expand = c(0,0)) #0, >0 and <100, 100
+p4<-ggplot(c.df, aes(x=percTryGS)) + 
+  geom_histogram() + mytheme + scale_y_continuous(expand = c(0,0)) + scale_x_continuous(expand = c(0,0)) #0, >0 and <100, 100
+
+p1 #percent of sp. with cover data that is measured
+p2 #percent of sp. with cover data that is species-specific
+p3 #percent of sp. with trait data from the original paper
+p4 #percent of sp. with trait data from TRY t is sp-specific
+
+
+#bin data quality values using a function that splits into None (0), Mid (1-99), All (100)
+BinIt<-function(data, newCol, origCol){
+  data[,newCol]<-rep(NA, dim(data)[1])
+  data[data[,origCol] == 0 & !is.na(data[,origCol]), newCol] <- 'None'
+  data[data[,origCol] >0 & data[,origCol] <100 & !is.na(data[,origCol]), newCol] <- 'Mid'
+  data[data[,origCol] == 100 & !is.na(data[,origCol]), newCol] <- 'All'
+  
+  return(data)
+}
+datafr<-c.df
+cats<-c('MeasCov','1spCov','OrigTr','TryGS')
+newCol.vec<-paste('bin',cats, sep='')
+origCol.vec<-paste('perc',cats, sep='')
+datafr.list<-list()
+for(i in 1:length(cats)){
+  datafr<-BinIt(data=datafr, newCol=newCol.vec[i], origCol=origCol.vec[i])
+}
+#all bins 
+datafr$qualityBins<-apply(datafr[,colnames(datafr) %in% newCol.vec], 1, function(x) paste(x, collapse="_"))
+#cover bins
+vec1<-paste('Measured=',datafr$binMeasCov, sep="")
+vec2<-paste('1sp=',datafr$bin1spCov, sep="")
+datafr$coverBins<-paste(vec1, vec2, sep=", ")
+#trait bins
+vec1<-paste('Original=',datafr$binOrigTr, sep="")
+vec2<-paste('SpeciesLevel=',datafr$binTryGS, sep="")
+datafr$traitBins<-paste(vec1, vec2, sep=", ")
+c.df2<-datafr
+
+#assign each cwm value a quality rank based on... (max quality = 4pts)
+
+#(4pt) if cwm was reported in the original paper rather than calculated
+crit1<-c.df2$cwmCalc == 'reported'
+crit1[crit1==TRUE]<-4
+#(1pt) if more than 25% of sp. is measured
+crit2<-c.df2$percMeasCov > 25 & !is.na(c.df2$percMeasCov)
+crit2[crit2==TRUE]<-1
+
+#(1pt) if more than 25% of sp. with cover data is species-specific
+crit3<-c.df2$perc1spCov > 25 & !is.na(c.df2$perc1spCov)
+crit3[crit3==TRUE]<-1
+
+#(1pt) if more than 25% of sp. with trait data is from the original paper OR is species-specific rather than Genus-specific
+vec1<-c.df2$percOrigTr
+vec2<-c.df2$percTryGS
+vec1[is.na(vec1)]<-0
+vec2[is.na(vec2)]<-0
+df.vec<-data.frame(vec1,vec2)
+df.vec$vec3<-df.vec$vec1 + df.vec$vec2
+crit4<-df.vec$vec3 > 25
+crit4[crit4==TRUE]<-1
+
+#combine criteria in a dataframe
+crit<-data.frame(crit1,crit2,crit3,crit4)
+crit$sum<-crit1+crit2+crit3+crit4
+crit[crit$crit1==4,'sum']<-4
+
+#set up a new column to hold quality rank values
+c.df2$qualRank<-crit$sum
+#View(c.df2)
+```
+
+_________________________________________________________________
+# 5. CLEAN
+Rename and reorganize columns
+```{r clean3,echo=TRUE, message=FALSE, warning=FALSE, include=FALSE}
+#remove unnecessary columns
+df1<-c.df2[,c('obsID','traitCat','invType','cwmCalc',
+              'invadedArea_invasiveSp','nativeArea_invasiveSp','invadedArea_nativeSp','nativeArea_nativeSp',
+              'qualityBins','coverBins','traitBins','qualRank',
+              'mean')]
+#View(c.df2)
+#make sure factors are coded as factors
+df1$qualityBins<- as.factor(df1$qualityBins)
+df1$coverBins<- as.factor(df1$coverBins)
+df1$traitBins<- as.factor(df1$traitBins)
+
+#rename columns
+colnames(df1)[which(colnames(df1) == 'coverBins')]<-'qualityCover'
+colnames(df1)[which(colnames(df1) == 'traitBins')]<-'qualityTrait'
+colnames(df1)[which(colnames(df1) == 'cwmCalc')]<-'qualityCWMcalc'
+colnames(df1)[which(colnames(df1) == 'InvArea')]<-'inv_trMean'
+colnames(df1)[which(colnames(df1) == 'InvSpInvArea')]<-'invINinv_trMean'
+colnames(df1)[which(colnames(df1) == 'NatArea')]<-'nat_trMean'
+colnames(df1)[which(colnames(df1) == 'invadedArea_invasiveSp')]<-'n_invSp_invArea'
+colnames(df1)[which(colnames(df1) == 'nativeArea_invasiveSp')]<-'n_invSp_natArea'
+colnames(df1)[which(colnames(df1) == 'invadedArea_nativeSp')]<-'n_natSp_invArea'
+colnames(df1)[which(colnames(df1) == 'nativeArea_nativeSp')]<-'n_natSp_natArea'
+colnames(df1)[which(colnames(df1) == 'mean')] <- 'cwm'
+
+# look for outliers
+#cn
+#litterpercN
+#litterpercN
+#percN
+sub<-subset(df1, traitCat == 'percN' & cwm >5)
+#sub 
+```
+
+_________________________________________________________________
+# 6. EXPORT
+```{r clean5,echo=TRUE, message=FALSE, warning=FALSE}
+newfilename<-'cwm.txt'
+write.table(df1, file=paste(synthdataPath,newfilename, sep='/'), sep='\t') 
+```
+
+
+
+
+

@@ -1,4 +1,4 @@
-#paperData_aggregate/script_agg_traitProblems.R
+#script_agg_traitProblems.R
 #Manually aggregate problematic aggIDs
 
 

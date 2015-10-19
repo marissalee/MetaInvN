@@ -1,7 +1,7 @@
-#paperData_aggregate/fxn_2_Agg.R
+#fxn_2_Agg.R
 #Functions to aggregate means and variances
 
-#This depends on the functions in paperData_aggregate/fxn_1_Calcs.R
+#This depends on the functions in fxn_1_Calcs.R
 #CalcMean
 #CalcSum
 #CalcDivide

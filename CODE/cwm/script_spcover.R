@@ -1,4 +1,4 @@
-#synthesis/script_spcover.R
+#script_spcover.R
 #Calculate species cover in native and invaded areas. 
 #NOTES: Cumulative species cover cannot exceed 100%.  Cumulative species cover can be less than 100% because of bare ground.
 
@@ -7,7 +7,7 @@
 library(doBy) #for orderBy
 library(reshape) #for untable()
 #source('rmdCode/paperData/fxn_loadHelpers.R') 
-source('rmdCode/cwm/fxn_idHelpers.R') 
+source('CODE/cwm/fxn_idHelpers.R') 
 
 
 
@@ -18,7 +18,6 @@ NoCov1<-!unique(cover$obsID) %in% unique(observations$obsID) # Does each observa
 unique(cover$obsID)[NoCov1=='TRUE'] # these obsIDs in the cover file do not have a correponding obsID in the observations file
 NoCov2<-!unique(observations$obsID) %in% unique(cover$obsID) # Does each observation have a cover entry?
 unique(observations$obsID)[NoCov2=='TRUE'] # these obsIDs in the observations file do not have a corresponding obsID in the cover file
-
 
 
 
@@ -60,7 +59,6 @@ cover.sub.Xsp[cover.sub.Xsp$numsp==1,'covDescript'] # its ok; although there is 
 
 ### For cover data where there is more than 1 species, divide the cover value by the species assigned in the 'covSpEntryID' and expand the table ####################################################
 #View(cover.sub.Xsp)
-dim(cover.sub.Xsp)
 # strsplit the covSpEntryID string and count the number of species (numsp)
 splist<-strsplit(as.character(cover.sub.Xsp$covSpEntryID), ',')
 # expand the cover dataframe by the numsp value and update the column with the covSpEntryID
@@ -68,26 +66,21 @@ expanded<-untable(cover.sub.Xsp, num=cover.sub.Xsp[,'numsp']) #need library(resh
 dim(expanded)
 expanded$covSpEntryID<-as.numeric(unlist(splist)) #update the covSpEntryID that is specific to each row in this expanded table
 
-
 # divide each cover value (inv and nat) by the numsp to get the new cover value (ex: new.covInvMean)
 # remember that ... Var(aX) = a^2 * Var(X)
 meancols<-c('stdmeanInv','stdmeanNat')
 varcols<-c('stdvarInv','stdvarNat')
-expanded[,meancols]<-expanded[,meancols] * (1 / expanded[,'numsp'])
-expanded[,varcols]<-expanded[,varcols] * (1 / expanded[,'numsp'])^2
-#View(expanded)
-
-
+expanded[,meancols]<-expanded[,meancols] * (1/ expanded[,'numsp'])
+expanded[,varcols]<-expanded[,varcols] * (1/ expanded[,'numsp'])^2
 
 
 ### Update expanded datatable with species name columns ####################################################
 
 # add spID
 expanded$spID<-paste(expanded$obsID, expanded$covSpEntryID, sep='.') #identify the spIDs
-#check to make sure you created unique spIDs
+#check to make sure you created unique spIDs... 
 tmp<-ddply(expanded, ~spID, summarise, n = length(spID))
-tmp[tmp$n >1,] #which spIDs are duplicates? figure out why
-#View(expanded[expanded$spID %in% tmp[tmp$n >1, 'spID'],])
+tmp[tmp$n >1,] #which spIDs are duplicates? this should be 0
 
 #expanded<-Add.spID.Names(expanded) # if this doesn't work, see below for one of those types of problems
 # # Problem - there are spIDs that were created from spEntryID == NA... need to exclude these somehow
@@ -103,7 +96,7 @@ expanded<-Add.spID.Names(expanded1) # now this should work
 
 
 # check spID names against those in 'species'
-covIndex<-ddply(expanded, ~spID, summarise, covDescript = unique(covDescript), spnam = GenusSpecies)
+covIndex<-ddply(expanded, ~spID, summarise, covDescript = unique(covDescript), spnam = unique(GenusSpecies))
 spIndex<-species[,c('spID','spName')]
 sum(!covIndex$spID %in% spIndex$spID) #if 0, then all covIndex spIDs are listed in species
 
@@ -144,6 +137,7 @@ for(i in 1:length(SPID)){
 
 
 ### Merge the expanded datatable and 1sp table use a new column to indicate cover value quality: covQuality2 == covNumSpp ####################################################
+#make factors into characters
 FactorsToChar<-function(df){
   tmp <- sapply(df, is.factor)
   df[tmp] <- lapply(df[,tmp], as.character)

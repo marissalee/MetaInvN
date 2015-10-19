@@ -1,4 +1,4 @@
-#rmdCode/paperData/script_load_checkTraits.R
+#CODE/paperData/script_load_checkTraits.R
 #Closer look at the structure of 'traits' 
 
 ## PART I. Overview ####################################################

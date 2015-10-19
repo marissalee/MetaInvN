@@ -1,4 +1,4 @@
-#paperData_aggregate/fxn_3_NumOps.R
+#fxn_3_NumOps.R
 #Functions to aggregate means and variances with 1 operation, 2 operations, 3 operations
 
 

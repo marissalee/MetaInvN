@@ -5,8 +5,8 @@
 ### Load Fxns and Libraries ####################################################
 library(plyr) #for ddply
 library(doBy) # for orderBy
-source('rmdCode/paperData/fxn_ConvertVar.R') # for FixVarTypes.Row()
-source('rmdCode/paperData/fxn_FixUnits.R') # for FixUnits()
+source('CODE/paperData/fxn_ConvertVar.R') # for FixVarTypes.Row()
+source('CODE/paperData/fxn_FixUnits.R') # for FixUnits()
 
 
 
@@ -30,9 +30,9 @@ for(i in 1:length(COVCAT)){
 #unique(cover$covUnit) #no NAs
 
 #3. Assign a common unit and create index for each Cat
-source('rmdCode/paperData/script_commUnit_cov.R') #TASK= Assign a common unit for each Cat; NEEDS= covUnitList; MAKES= c.unitIndex
+source('CODE/paperData/script_commUnit_cov.R') #TASK= Assign a common unit for each Cat; NEEDS= covUnitList; MAKES= c.unitIndex
 #c.unitIndex
-source('rmdCode/paperData/script_convertOps_cov.R') #TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
+source('CODE/paperData/script_convertOps_cov.R') #TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
 colnames(unitIndex)[1]<-'covCat'
 #unitIndex
 
@@ -77,9 +77,9 @@ for(i in 1:length(TRAITCAT)){
 #unique(traits[is.na(traits$traitUnit),'traitCat']) #none
 
 #3. Assign a common unit and create index for each Cat
-source('rmdCode/paperData/script_commUnit_traits.R') # TASK= Assign a common unit for each Cat; NEEDS= covUnitList; MAKES= c.unitIndex
+source('CODE/paperData/script_commUnit_traits.R') # TASK= Assign a common unit for each Cat; NEEDS= covUnitList; MAKES= c.unitIndex
 #c.unitIndex
-source('rmdCode/paperData/script_convertOps_traits.R') # TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
+source('CODE/paperData/script_convertOps_traits.R') # TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
 colnames(unitIndex)[1]<-'traitCat'
 #unitIndex
 
@@ -124,9 +124,9 @@ for(i in 1:length(MEASCAT)){
 #unique(measures[is.na(measures$measUnit),'measCat']) #none
 
 #3. Assign a common unit and index to convert units to the common unit
-source('rmdCode/paperData/script_commUnit_meas.R') # TASK= Assign a common unit for each measCat; NEEDS= measUnitList; MAKES= c.unitIndex
+source('CODE/paperData/script_commUnit_meas.R') # TASK= Assign a common unit for each measCat; NEEDS= measUnitList; MAKES= c.unitIndex
 #c.unitIndex
-source('rmdCode/paperData/script_convertOps_meas.R') #TASK= Assing an index to convert units to the common unit; NEEDS= c.unitIndex; MAKES= index.list
+source('CODE/paperData/script_convertOps_meas.R') #TASK= Assing an index to convert units to the common unit; NEEDS= c.unitIndex; MAKES= index.list
 colnames(unitIndex)[1]<-'measCat'
 #unitIndex
 

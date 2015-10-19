@@ -1,8 +1,8 @@
-#synthesis/script_TRYstdUnits.R
+#script_TRYstdUnits.R
 #Convert TRY data to the common unit for each trait type
 
 ### Load Fxns and Libraries ####################################################
-source('rmdCode/cwm/fxn_idHelpers.R') # for AddTraitOI
+source('CODE/cwm/fxn_idHelpers.R') # for AddTraitOI
 library(plyr) #for ddply
 library(doBy) # for orderBy
 
@@ -33,8 +33,8 @@ unitList
 unique(trydf1$RelUncertainty) #there is no VAR data
 
 #3. Assign a common unit and create index for each Cat
-source('rmdCode/cwm/script_commUnit_try.R') #TASK= Assign a common unit for each Cat; NEEDS= unitList; MAKES= c.unitIndex
-source('rmdCode/cwm/script_convertOps_try.R') #TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
+source('CODE/cwm/script_commUnit_try.R') #TASK= Assign a common unit for each Cat; NEEDS= unitList; MAKES= c.unitIndex
+source('CODE/cwm/script_convertOps_try.R') #TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
 colnames(unitIndex)[1]<-'traitOI'
 
 #4. Convert values to assigned common unit

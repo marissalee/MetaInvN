@@ -32,7 +32,7 @@ traits.c<-df.result[[3]]
 
 
 ### Load Fxns to convert varTypes to VAR ####################################################
-source('rmdCode/paperData/fxn_ConvertVar.R') #for FixVarTypes() and FixVarTypes.Row()
+source('CODE/paperData/fxn_ConvertVar.R') #for FixVarTypes() and FixVarTypes.Row()
 #FixVarTypes() -- coverts df.agg var value to variance (VAR) and adds columns, uses df to index the type of variance (VAR, SD, SE, etc)
 #FixVarTypes.Row() -- coverts df var value to variance (VAR) and adds columns
 

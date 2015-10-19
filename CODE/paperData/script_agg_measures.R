@@ -2,11 +2,11 @@
 #Aggregate measures 
 
 library(plyr) #for ldply
-source('rmdCode/paperData/fxn_1_Calcs.R')
-source('rmdCode/paperData/fxn_2_Agg.R')
-source('rmdCode/paperData/fxn_3_NumOps.R')
-source('rmdCode/paperData/fxn_InsertAgg.R')
-source('rmdCode/paperData/fxn_4_UnitProb.R')
+source('CODE/paperData/fxn_1_Calcs.R')
+source('CODE/paperData/fxn_2_Agg.R')
+source('CODE/paperData/fxn_3_NumOps.R')
+source('CODE/paperData/fxn_InsertAgg.R')
+source('CODE/paperData/fxn_4_UnitProb.R')
 
 #1. Fix Typos
 #none
@@ -159,7 +159,7 @@ agg.unitProbs.fixed<-agg.unitProbs[!agg.unitProbs %in% removeThese]
 agg.unitProbs.fixed
 
 #7b. Aggregate the aggProbs aggIDs by hand
-source('rmdCode/paperData/script_agg_measureProblems.R') 
+source('CODE/paperData/script_agg_measureProblems.R') 
 #TASK= do unique aggregation operations
 #NEEDS= measAgg, agg.Probs, agg.unitProbs, measure.new
 #MAKES= measure.new3

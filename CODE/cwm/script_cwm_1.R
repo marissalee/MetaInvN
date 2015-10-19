@@ -1,4 +1,4 @@
-#synthesis/script_cwm_1.R
+#script_cwm_1.R
 #Prep trait x spID dataframes
 
 

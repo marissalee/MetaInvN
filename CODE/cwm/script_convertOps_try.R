@@ -3,7 +3,7 @@
 
 
 ### Load functions ####################################################
-source('rmdCode/paperData/fxn_makeIndex.R')
+source('CODE/paperData/fxn_makeIndex.R')
 library(plyr) # for ldply
 
 ### Construct an index for each covCat that hold details on how to convert units ####################################################

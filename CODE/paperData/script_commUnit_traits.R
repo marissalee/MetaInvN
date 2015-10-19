@@ -1,4 +1,4 @@
-#paperData_stdUnits/script_commUnit_traits.R
+#script_commUnit_traits.R
 #Assign a common unit for each trait type
 
 

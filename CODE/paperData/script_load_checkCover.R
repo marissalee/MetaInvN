@@ -1,4 +1,4 @@
-#rmdCode/paperData/script_load_checkCover.R
+#CODE/paperData/script_load_checkCover.R
 #Closer look at the structure of 'cover'
 
 ## PART I. Overview ####################################################
@@ -47,7 +47,7 @@ removeRows<-expanded$spID %in% SPID[!numIDd]
 expanded1<-expanded[!removeRows,]
 
 #ii. Fill spIDs in expanded subtable
-source('rmdCode/cwm/fxn_idHelpers.R')
+source('CODE/cwm/fxn_idHelpers.R')
 cover.Xsp.expanded<-Add.spID.Names(expanded1) # now this should work
 
 

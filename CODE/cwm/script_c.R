@@ -3,7 +3,7 @@
 
 ### Load libraries and fxns ####################################################
 library(plyr) 
-source('rmdCode/cwm/fxn_FillTable_cover.R')
+source('CODE/cwm/fxn_FillTable_cover.R')
 
 
 
@@ -48,20 +48,18 @@ emptyDf<-emptyDf[!is.na(emptyDf$Genus),] #fix this.
 unique(cover.sp$covCat) #good. only 1 covCat
 unique(cover.sp$stdunit) #good. only 1 unit
 cover.sp.summ<-ddply(cover.sp, ~spID, summarise,
-                     meanInv = stdmeanInv,
-                     varInv = stdvarInv,
-                     nInv = covInvN,
-                     meanNat = stdmeanNat,
-                     varNat = stdvarNat,
-                     nNat = covNatN,
-                     unit = stdunit,
-                     qualityMeas = covQuality,
-                     qualityNumSp = covNumSpp)
+                     meanInv= stdmeanInv,
+                     varInv= stdvarInv,
+                     nInv=covInvN,
+                     meanNat= stdmeanNat,
+                     varNat= stdvarNat,
+                     nNat= covNatN,
+                     unit= stdunit,
+                     qualityMeas= covQuality,
+                     qualityNumSp= covNumSpp)
+
 #View(cover.sp.summ)
 sum(is.na(cover.sp.summ$spID)) # this should be 0.  If not, then there is an 'NA' under spID and need to get rid of that row
-#View(cover.sp.summ)
-
-
 
 
 # B. For each spID, enter the data into the appropriate column of emptyDf

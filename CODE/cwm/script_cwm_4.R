@@ -1,4 +1,4 @@
-#synthesis/script_c4.R
+#script_c4.R
 #Calculate the community-weighted mean for plant traits in invaded and native areas
 
 ### Load libraries and fxns ####################################################
