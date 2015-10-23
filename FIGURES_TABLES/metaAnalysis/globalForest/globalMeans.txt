@@ -1,0 +1,10 @@
+"measCAT"	"labels"	"est"	"var"	"cil"	"ciu"	"k"	"pval"	"intraPaperCorr"	"heterogen"	"NoOverlap0"	"alpha05"
+"1"	"nh"	"Ammonium"	0.257	0.005	0.12	0.395	141	0	0.531	0.2	TRUE	TRUE
+"2"	"no"	"Nitrate"	0.168	0.008	-0.003	0.339	150	0.054	0.821	0.334	FALSE	FALSE
+"3"	"toti"	"Total inorganic N"	0.146	0.01	-0.054	0.347	195	0.153	0.873	0.456	FALSE	FALSE
+"4"	"ammonif"	"Ammonification"	-0.05	0.017	-0.305	0.204	50	0.699	1	0.211	FALSE	FALSE
+"5"	"nitrif"	"Nitrification"	0.452	0.015	0.21	0.694	79	0	1	0.356	TRUE	TRUE
+"6"	"nminz"	"Mineralization"	0.359	0.013	0.136	0.581	101	0.002	0.841	0.384	TRUE	TRUE
+"7"	"soiln"	"Soil N"	0.531	0.013	0.308	0.754	187	0	0.706	0.923	TRUE	TRUE
+"8"	"soilcn"	"Soil C:N"	-0.054	0.01	-0.246	0.139	100	0.586	1	0.246	FALSE	FALSE
+"9"	"som"	"Soil organic matter"	0.586	0.043	0.18	0.992	90	0.005	0.58	1.552	TRUE	TRUE

@@ -103,9 +103,12 @@ papers1<-papers
 ```{r removeMeas,echo=TRUE, warning=FALSE, message=FALSE}
 summ.meas <- ddply(measures1,~measCat,summarise, numObs=length(unique(obsID)))
 summ.meas
-paste('Remove these measurement types because there are very few observations')
-summ.meas[summ.meas$numObs < 12,]
-measOK<-summ.meas[!summ.meas$numObs <12,'measCat']
+
+removeMeasCats<-c('biom','litterbiom','plantcov',
+                  'cn','littercn','percN','litterpercN',
+                  'microbcn','ph','soilmoi')
+paste('Remove these measurement types:', paste(removeMeasCats, collapse=", "))
+measOK<-summ.meas[!summ.meas$measCat %in% removeMeasCats,'measCat']
 
 #subset the remaining dfs from paperData
 measures2<-subset(measures1, measCat %in% measOK)
@@ -260,7 +263,6 @@ dat.obs1<-dat.obs[,c('paperID','obsID','measCat',
                  'measQuality',
                  'ecosystCat','studyType','InvNfix','NatNfix','Nfix','invGenera')]
 
-
 ### Re-organize cwm data and prep for merging ######################################################
 #recast cwm so that type of CWM values are in the same row
 cwm.tmp<-cwm.c[,c('obsID','traitCat','invType','qualRank','cwm')]
@@ -282,7 +284,6 @@ dat.all<-merge(dat.obs1, c.cwm.tmp, by='obsID', all=TRUE)
 
 ### Calculate the effect sizes ######################################################
 dat1 <- escalc(measure=chooseESType, m1i=m1i, sd1i=sd1i, n1i=n1i, m2i=m2i, sd2i=sd2i, n2i=n2i, data=dat.all) 
-#head(dat1)
 ```
 
 _________________________________________________________________
@@ -326,7 +327,9 @@ m.dat1.tr1<-m.dat1.tr[!is.na(m.dat1.tr$value),] #get rid of the NAs
 ```
 3B. Distribution of effect size values
 ```{r distES, echo=TRUE, warning=FALSE, message=FALSE}
-pHist_ES<-ggplot(dat1.meas, aes(x=yi)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+dat1.meas_tmp<-dat1.meas[!is.na(dat1.meas$yi),]
+
+pHist_ES<-ggplot(dat1.meas_tmp, aes(x=yi)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of effect size values')
 
 newfilename<-'pHist_ES.png'
@@ -342,11 +345,11 @@ dat1[dat1$measCat=='nh' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outl
 #no
 dat1[dat1$measCat=='no' & dat1$yi > 30 & !is.na(dat1$yi),]
 dat1[dat1$measCat=='no' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
-#ph
-dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),]
-dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),]
-dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
-dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+# #ph
+# dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),]
+# dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),]
+# dat1[dat1$measCat=='ph' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
+# dat1[dat1$measCat=='ph' & dat1$yi < -30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
 #soiln
 dat1[dat1$measCat=='soiln' & dat1$yi > 30 & !is.na(dat1$yi),]
 dat1[dat1$measCat=='soiln' & dat1$yi > 30 & !is.na(dat1$yi),'yi']<-NA #replace outlier with NA
@@ -360,8 +363,8 @@ pHist_ES_OR<-ggplot(dat1.meas, aes(x=yi)) + facet_wrap(~measCat, scales='free', 
   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of effect size values\nOutliers removed')
 pHist_ES_OR
 
-paste('Removed outlier effect size values in nh, no, ph, soiln.')
-paste('Effect size values look normally-distributed - except cn, littercn, litterpercN, probably because there was not very much data')
+paste('Removed outlier effect size values in nh, no, soiln.')
+paste('Effect size values look normally-distributed-ish')
 
 newfilename<-'pHist_ES_OR.png'
 png(paste(figuresPath,newfilename, sep='/'), 
@@ -392,7 +395,8 @@ pHist_measRef
 dev.off()
 
 #Log-transform some measurements
-logtMeas<-c('nh','no','toti','soilmoi','som','soiln', 'biom', 'litterbiom','littercn', 'litterpercN','percN')
+# logtMeas<-c('nh','no','toti','soilmoi','som','soiln', 'biom', 'litterbiom','littercn', 'litterpercN','percN')
+logtMeas<-c('nh','no','toti','som','soiln')
 paste('Log-transform the following soil measurement values to improve normality:',paste(logtMeas, collapse=', '))
 nologtMeas<-unique(dat1$measCat)[!unique(dat1$measCat) %in% logtMeas]
 SD.logt<-function(meanval, sdval){ #function that corrects the variance values associated with each observation mean value that is log-transformed
@@ -478,7 +482,7 @@ pHist_measRef_T_OR
 dev.off()
 
 paste('Removed outlier effect size values in ammonif, nitrif, nminz.')
-paste('Most unit-std soil meas. values look normally-distributed after log-transforming some measurement types - except cn, litterbiom, littercn, litterpercN, probably because there was not very much data')
+paste('Most unit-std soil meas. values look normally-distributed after log-transforming some measurement types')
 ```
 3D. Distribution of CWM trait values
 ```{r distCWM, echo=TRUE, warning=FALSE, message=FALSE}

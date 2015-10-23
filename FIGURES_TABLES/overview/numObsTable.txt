@@ -8,7 +8,7 @@
 "7"	"studyType"	"field expt removal"	25
 "8"	"studyType"	"field study"	273
 "9"	"studyType"	"greenhouse expt"	61
-"10"	"legume"	"Invasive and resident N-fixers"	20
-"11"	"legume"	"Invasive N-fixers only"	51
-"12"	"legume"	"No N-fixers"	295
-"13"	"legume"	"Resident N-fixers only"	38
+"10"	"Nfix"	"Invasive and resident N-fixers"	20
+"11"	"Nfix"	"Invasive N-fixers only"	51
+"12"	"Nfix"	"No N-fixers"	295
+"13"	"Nfix"	"Resident N-fixers only"	38

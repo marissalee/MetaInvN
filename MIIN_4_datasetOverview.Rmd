@@ -46,8 +46,6 @@ fig.height<-2.5 #inches
 fig.width<- 2.5 #inches
 fig.res<-300
 
-#synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "overview") #where to put the clean dataframes
-
 #from MIIN_3_calcEffectSizes.Rmd
 papers<-read.table("DATA/DATA_SYNTHESIZED/calcES/papers.txt", sep="\t") 
 observations<-read.table("DATA/DATA_SYNTHESIZED/calcES/observations.txt", header=TRUE, sep="\t") 
@@ -120,6 +118,15 @@ paste(dim(rejected.Liao)[1], 'papers that were used in Liao 2008 were rejected f
 accepted.before<-subset(papers, source != 'Liao2007' & reject == 'Accepted papers' & year < maxLiaoyr)
 numAccBef<-dim(accepted.before)[1]
 paste(dim(accepted.before)[1], 'papers that were published before the most recent Liao 2008 reference were included in this meta-analysis, but overlooked by Liao 2008')
+
+#attached the 'source2' column to the metaDataset
+temp_indx<-papers[,c('paperID','source2')]
+metaDataset<-merge(metaDataset, temp_indx, by='paperID')
+
+#re-write the metaDataset file so that it has the source2 column
+newfilename<-'metaDataset.txt'
+synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "calcES")
+write.table(metaDataset, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
 ```
   
 _________________________________________________________________
@@ -147,7 +154,7 @@ summ.obs.st <- ddply(observations,~studyType,summarise, numObs=length(paperID))
 summ.obs.nfix <- ddply(observations,~Nfix,summarise, numObs=length(paperID))
 factorlist<-list(summ.obs.eco, summ.obs.st, summ.obs.nfix)
 factortab<-ldply(factorlist)
-factortab$factor<-c(rep('ecosystem',5), rep('studyType', 4), rep('legume',4))
+factortab$factor<-c(rep('ecosystem',5), rep('studyType', 4), rep('Nfix',4))
 factortab$level<-NA
 factortab[!is.na(factortab$ecosystCat),'level']<-as.character(factortab[!is.na(factortab$ecosystCat),'ecosystCat'])
 factortab[!is.na(factortab$studyType),'level']<-as.character(factortab[!is.na(factortab$studyType),'studyType'])
@@ -338,7 +345,6 @@ tmp<-ddply(metaDataset, ~obsID+measCat, summarize,
       m2i_logt = unique(m2i_logt),
       measQuality = unique(measQuality))
 tmp$obsID<-as.factor(tmp$obsID)
-colnames(tmp)
 m.tmp<-melt(tmp, idcols=c('obsID','measCat','measQuality'))
 m.tmp$invType<-rep(NA,length(dim(m.tmp)[1])) 
 m.tmp[m.tmp$variable == 'm1i_logt','invType']<-'inv'
