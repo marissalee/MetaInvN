@@ -37,12 +37,33 @@ for(t in 1:length(df.list2)){
     spCounts<-ddply(df[df$obsID==OBSID[o],c('spInvasive','InvCovHere','NatCovHere',includeTraitCol)], ~spInvasive, summarise,
           nInvCov=sum(InvCovHere),
           nNatCov=sum(NatCovHere))
-    occup<-c('invasive','native') %in% spCounts$spInvasive
-    if(occup[1] == FALSE){spInv<-data.frame(nInvCov=0, nNatCov=0)}else{spInv<-spCounts[spCounts$spInvasive=='invasive',2:3]}
-    if(occup[2] == FALSE){spNat<-data.frame(nInvCov=0, nNatCov=0)}else{spNat<-spCounts[spCounts$spInvasive=='native',2:3]}
+    
+    #are there native and invasive species in either native or invaded areas?
+    occup<-c('invasive','not invasive') %in% spCounts$spInvasive
+    
+    #number of invasive species
+    spInv<-data.frame(nInvCov=NA, nNatCov=NA) #empty table
+    #if there are not invasive species, then fill both n columns with 0
+    #if there are invasive species, then fill both n columns with the data we have
+    if(occup[1] == FALSE){
+      spInv[,c("nInvCov","nNatCov")]<-0
+    }else{
+      spInv[,c("nInvCov","nNatCov")]<-spCounts[spCounts$spInvasive=='invasive',c("nInvCov","nNatCov")]
+        }
+    
+    #number of native species
+    spNat<-data.frame(nInvCov=NA, nNatCov=NA) #empty table
+    #if there are not native species, then fill both n columns with 0
+    #if there are native species, then fill both n columns with the data we have
+    if(occup[2] == FALSE){
+      spNat[,c("nInvCov","nNatCov")]<-0
+    }else{
+      spNat[,c("nInvCov","nNatCov")]<-spCounts[spCounts$spInvasive=='not invasive',c("nInvCov","nNatCov")]
+        }
+    
+    #put this into one row and update the names
     spCountsDF<-data.frame(spInv, spNat)
     colnames(spCountsDF)<-paste(rep(c('invadedArea','nativeArea'),2),rep(c('invasiveSp','nativeSp'), each=2), sep="_")
-    #spCountsDF
     
     # community-weighted trait var and n (assuming that the relative abundance is known)
     tmp<-CalcMean(group.means=df[rows, meanTraitCol], 
@@ -50,7 +71,7 @@ for(t in 1:length(df.list2)){
               group.ns=df[rows, nTraitCol])
     var<-tmp$global.var
     nTr<-tmp$global.n
-    
+
     # unit that the cwm trait values are in
     unit<-paste(unique(df[rows,unitTraitCol]), collapse="_") #need to go back and make it so that traits are all in the same unit before this... C:N should be molC/molN
     

@@ -1,0 +1,10 @@
+"measCAT"	"labels"	"QE"	"QEdf"	"QEp"	"QM"	"QMp"
+"1"	"nh"	"Ammonium"	307.859	140	0	13.225	0
+"2"	"no"	"Nitrate"	405.181	149	0	3.674	0.055
+"3"	"toti"	"Total inorganic N"	492.204	194	0	2	0.157
+"4"	"ammonif"	"Ammonification"	74.517	49	0.011	0.119	0.731
+"5"	"nitrif"	"Nitrification"	166.976	78	0	13.021	0
+"6"	"nminz"	"Mineralization"	207.895	100	0	9.739	0.002
+"7"	"soiln"	"Soil N"	608.337	186	0	21.385	0
+"8"	"soilcn"	"Soil C:N"	190.683	99	0	0.291	0.59
+"9"	"som"	"Soil organic matter"	368.53	89	0	7.758	0.005

@@ -1,0 +1,13 @@
+".id"	"traitCat"	"nSp.withCoverTraitData"	"nSp.withCoverData"	"nSp.missingCoverData"
+"1"	"invSp"	"percN"	376	405	41
+"2"	"invSp"	"cn"	204	405	41
+"3"	"invSp"	"litterpercN"	46	405	41
+"4"	"invSp"	"littercn"	46	405	41
+"5"	"inv"	"percN"	537	596	100
+"6"	"inv"	"cn"	285	596	100
+"7"	"inv"	"litterpercN"	85	596	100
+"8"	"inv"	"littercn"	78	596	100
+"9"	"ref"	"percN"	476	560	92
+"10"	"ref"	"cn"	249	560	92
+"11"	"ref"	"litterpercN"	95	560	92
+"12"	"ref"	"littercn"	63	560	92

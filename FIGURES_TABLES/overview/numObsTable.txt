@@ -1,14 +1,25 @@
-"factor"	"level"	"numObs"
-"1"	"ecosystem"	"forest"	123
-"2"	"ecosystem"	"grassland"	176
-"3"	"ecosystem"	"other"	4
-"4"	"ecosystem"	"shrubland"	73
-"5"	"ecosystem"	"wetland"	28
-"6"	"studyType"	"field expt addition"	45
-"7"	"studyType"	"field expt removal"	25
-"8"	"studyType"	"field study"	273
-"9"	"studyType"	"greenhouse expt"	61
-"10"	"Nfix"	"Invasive and resident N-fixers"	20
-"11"	"Nfix"	"Invasive N-fixers only"	51
-"12"	"Nfix"	"No N-fixers"	295
-"13"	"Nfix"	"Resident N-fixers only"	38
+"ecosyst"	"source2"	"numObs"	"stud"	"nfix"
+"1"	"forest"	"Liao 2008"	31	NA	NA
+"2"	"forest"	"New studies"	92	NA	NA
+"3"	"grassland"	"Liao 2008"	67	NA	NA
+"4"	"grassland"	"New studies"	109	NA	NA
+"5"	"other"	"New studies"	4	NA	NA
+"6"	"shrubland"	"Liao 2008"	16	NA	NA
+"7"	"shrubland"	"New studies"	57	NA	NA
+"8"	"wetland"	"Liao 2008"	14	NA	NA
+"9"	"wetland"	"New studies"	14	NA	NA
+"10"	NA	"Liao 2008"	8	"field expt addition"	NA
+"11"	NA	"New studies"	37	"field expt addition"	NA
+"12"	NA	"New studies"	25	"field expt removal"	NA
+"13"	NA	"Liao 2008"	116	"field study"	NA
+"14"	NA	"New studies"	157	"field study"	NA
+"15"	NA	"Liao 2008"	4	"greenhouse expt"	NA
+"16"	NA	"New studies"	57	"greenhouse expt"	NA
+"17"	NA	"Liao 2008"	1	NA	"Invasive and resident N-fixers"
+"18"	NA	"New studies"	19	NA	"Invasive and resident N-fixers"
+"19"	NA	"Liao 2008"	16	NA	"Invasive N-fixers only"
+"20"	NA	"New studies"	35	NA	"Invasive N-fixers only"
+"21"	NA	"Liao 2008"	96	NA	"No N-fixers"
+"22"	NA	"New studies"	199	NA	"No N-fixers"
+"23"	NA	"Liao 2008"	15	NA	"Resident N-fixers only"
+"24"	NA	"New studies"	23	NA	"Resident N-fixers only"

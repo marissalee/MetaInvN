@@ -2,7 +2,7 @@
 #Calculate the community-weighted mean for plant traits in invaded and native areas
 
 ### Load libraries and fxns ####################################################
-library(plyr) 
+require(plyr) 
 source('CODE/cwm/fxn_FillTable_cover.R')
 
 
@@ -73,7 +73,7 @@ colnames(spIDcover)[-(1:4)]<-paste('cover',colsToAmmend,sep='_') #rename columns
 
 # C. Summarize
 sparse.fill_cover<-SparseSumm.cover(spIDcover)
-sparse.fill_cover
+#sparse.fill_cover
 
 
 

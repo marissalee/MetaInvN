@@ -6,7 +6,9 @@
 
 #For each trait dataframe and obsID, calculate relative abundance for each spID with trait and cover data in invaded and native areas
 #loop through each trait data frame in df.list; store an updated list of trait data frames
+
 df.list2<-list()
+df.list.numberOfSpecies<-list()
 t<-0
 for(t in 1:length(df.list)){
   
@@ -18,13 +20,14 @@ for(t in 1:length(df.list)){
   df[,c('relabund_InvArea','relabund_NatArea', 'relabund_InvSpInvArea','relabund_notes')]<-rep(NA, dim(df)[1]) #make columns to hold the relative abundance values and notes
   
   #loop through each obsID
+  numberOfSpecies.list<-list()
   OBSID<-unique(df$obsID)
   o<-0
   for(o in 1:length(OBSID)){
     
     #1. Identify rows in obsID that have all pieces of data
     rows<-df$obsID==OBSID[o] & df[,includeTraitCol]==1
-    rows
+    
     # Calculate the relative abundance for each spID in that obsID. The relative abundances of all spIDs in that obsID should sum to 1
     # NOTE: spcover of the species in an obsID might not add to 100% if ... 
     # A. Not all of the species were measured
@@ -50,11 +53,28 @@ for(t in 1:length(df.list)){
     #do the calculation and save the data in the pre-made columns of the df
     df[invrows,'relabund_InvSpInvArea']<-df[invrows,'cover_mean_Inv'] / coverInvSpInvArea.total *100 #calculate the relative abundance of each species based on the total percent cover measured on the species included
     
+    #Tally up the number of species per "community" per observation
+    #invasive species in invaded area
+    number.invSp<-sum(invrows)
+    #species in invaded area
+    number.spInvArea<-sum(!is.na(df[rows,'relabund_InvArea']))
+    #species in reference area
+    number.spNatArea<-sum(!is.na(df[rows,'relabund_NatArea']))
+    df.numberOfSpecies<-data.frame(obsID=OBSID[o], traitCat=traitsOfInterest[t], number.invSp, number.spInvArea, number.spNatArea)
+    numberOfSpecies.list[[o]]<-df.numberOfSpecies
   }
+  numberOfSpecies.df<-ldply(numberOfSpecies.list)
+  df.list.numberOfSpecies[[as.character(traitsOfInterest[t])]]<-numberOfSpecies.df
   
   # save a df for each trait
   df.list2[[as.character(traitsOfInterest[t])]]<-df
+  
 }
 #str(df.list2)
 #View(df.list2[['cn']])
+#View(df.list.numberOfSpecies[['cn']])
+
+numberOfSpecies.tally<-ldply(df.list.numberOfSpecies)
+
+
 

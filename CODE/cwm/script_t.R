@@ -2,7 +2,7 @@
 #Calculate the community-weighted mean for plant traits in invaded and native areas
 
 ### Load libraries and fxns ####################################################
-library(plyr) #for ddply
+require(plyr) #for ddply
 source('CODE/cwm/fxn_FillTable_traits.R') #for FillTable, FillVarTy, SparseSumm
 
 

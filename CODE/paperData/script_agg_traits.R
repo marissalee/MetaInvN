@@ -1,7 +1,7 @@
 #1_paperData/script_agg_traits.R
 #Aggregate Traits
 
-library(plyr) #for ldply
+require(plyr) #for ldply
 source('CODE/paperData/fxn_1_Calcs.R')
 source('CODE/paperData/fxn_2_Agg.R')
 source('CODE/paperData/fxn_3_NumOps.R')
@@ -12,10 +12,11 @@ source('CODE/paperData/fxn_4_UnitProb.R')
 # Problem1 = need to get rid of space after comma
 #traitAgg$operation2order #need to get rid of space after comma
 messedup<-grep(", ", as.character(traitAgg[,'operation2order']))
-messedup #none
+messedup
 traitAgg[messedup,'operation2order'] #these are all the same, so I can just replace it with the same character string
 traitAgg[messedup,'operation2order']<-'N,biomass'
-
+messedup<-grep(", ", as.character(traitAgg[,'operation2order']))
+messedup #none
 
 
 

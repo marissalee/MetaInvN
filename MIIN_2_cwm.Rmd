@@ -20,11 +20,11 @@ output: pdf_document
 5. Export to DATA_SYNTHESIZED/cwm folder
 
 ```{r libraries, echo=TRUE}
-knitr::opts_chunk$set(cache=TRUE)
+#knitr::opts_chunk$set(cache=TRUE)
 
-library(ggplot2)
-library(gridExtra)
-library(reshape2)
+#library(ggplot2)
+#library(gridExtra)
+#library(reshape2)
 
 source('CODE/mytheme.R')
 
@@ -62,6 +62,20 @@ source('CODE/cwm/script_traitBySpecies.R') # TASK= Pulls relavant TRY data and c
 #max(nGS$n) #ok, no species x traitCats repeated
 #nGX<-ddply(tryGX.summ, ~AccGenus+traitOI, summarise,n=length(AccGenus))
 #max(nGX$n) #ok, no species x traitCats repeated
+
+#save the rows of TRY data that were used so that I can acknowledge data authors
+usedTry<-merge(tryGS,tryGX, all=TRUE)
+newfilename<-'usedTryData.txt'
+write.table(usedTry, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
+contribTab<-ddply(usedTry, ~LastName+TraitName, summarize, 
+      nrows=sum(!is.na(stdmean)))
+nrows.total<-sum(contribTab$nrows)
+contribTab$perc<- (contribTab$nrows / nrows.total)*100
+contribTab
+newfilename<-'usedTryData_contrib.txt'
+write.table(contribTab, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
 ```
 1C. Create a *Traits x spID* matrix
 ```{r trait_empty,echo=TRUE, message=FALSE, warning=FALSE}
@@ -119,7 +133,12 @@ The relative abundance of each spID is based on the total percent cover in the i
 source('CODE/cwm/script_cwm_2.R') # TASK= Calculates the relative abundance for each spID and ammends to each trait dataframe; NEEDS= spIDsyn1, df.list; MAKES= df.list2
 #View(df.list2[['cn']])
 #str(df.list2)
+#View(numberOfSpecies.tally)
+
+newfilename<-'numberOfSpecies_cwm.txt'
+write.table(numberOfSpecies.tally, file=paste(synthdataPath,newfilename, sep='/'), sep='\t') 
 ```
+
 3C. Calculate the *community-weighted trait mean* for each obsID (invaded area cwm, native area cwm, invasive species invaded area). DEFINITION: a community weighted mean value (hereafter CWM) can be calculated for each trait as the mean of trait values in the community, weighted by the relative abundance of the species carrying each value (Violle C, Navas ML, Vile D, Kazakou E, Fortunel C, Hummel I, Garnier E (2007) Oikos)
 ```{r calc_cwm,echo=TRUE, message=FALSE, warning=FALSE}
 ### make it so obsID has it own column
@@ -197,13 +216,16 @@ c.df<-dcast(m.df, obsID + traitCat + invType +
               invadedArea_invasiveSp + nativeArea_invasiveSp + invadedArea_nativeSp + nativeArea_nativeSp +
               cwmCalc ~ 
               valueType)
-#View(c.df)
 
 #calculate % coverage
 c.df$percMeasCov<-c.df$nMeasCov / c.df$nSp * 100 #calc perc cover measured
 c.df$perc1spCov<-c.df$n1spCov / c.df$nSp * 100 #calc perc 1 sp measured
 c.df$percOrigTr<-c.df$nOrigTr / c.df$nSp * 100 #calc perc orig trait data
 c.df$percTryGS<-c.df$nTryGS / c.df$nSp * 100 #calc perc species trait data
+
+#save c.df so that I can recap this info and put it into a pretty table in the 'datasetOverview.Rmd'
+newfilename<-'cwm_quality.txt'
+write.table(c.df, file=paste(synthdataPath,newfilename, sep='/'), sep='\t') 
 
 #check out the distribution of data quality values 
 p1<-ggplot(c.df, aes(x=percMeasCov)) + 
@@ -221,12 +243,11 @@ p3 #percent of sp. with trait data from the original paper
 p4 #percent of sp. with trait data from TRY t is sp-specific
 
 
-#bin data quality values using a function that splits into None (0), Mid (1-99), All (100)
+#bin data quality values using a function that splits into greater than 25%, less than or equal to 25%
 BinIt<-function(data, newCol, origCol){
   data[,newCol]<-rep(NA, dim(data)[1])
-  data[data[,origCol] == 0 & !is.na(data[,origCol]), newCol] <- 'None'
-  data[data[,origCol] >0 & data[,origCol] <100 & !is.na(data[,origCol]), newCol] <- 'Mid'
-  data[data[,origCol] == 100 & !is.na(data[,origCol]), newCol] <- 'All'
+  data[data[,origCol] >25 & !is.na(data[,origCol]), newCol] <- 'greaterThan25perc'
+  data[data[,origCol] <=25 & !is.na(data[,origCol]), newCol] <- 'lessThan25perc'
   
   return(data)
 }
@@ -238,16 +259,10 @@ datafr.list<-list()
 for(i in 1:length(cats)){
   datafr<-BinIt(data=datafr, newCol=newCol.vec[i], origCol=origCol.vec[i])
 }
+#View(datafr)
+
 #all bins 
 datafr$qualityBins<-apply(datafr[,colnames(datafr) %in% newCol.vec], 1, function(x) paste(x, collapse="_"))
-#cover bins
-vec1<-paste('Measured=',datafr$binMeasCov, sep="")
-vec2<-paste('1sp=',datafr$bin1spCov, sep="")
-datafr$coverBins<-paste(vec1, vec2, sep=", ")
-#trait bins
-vec1<-paste('Original=',datafr$binOrigTr, sep="")
-vec2<-paste('SpeciesLevel=',datafr$binTryGS, sep="")
-datafr$traitBins<-paste(vec1, vec2, sep=", ")
 c.df2<-datafr
 
 #assign each cwm value a quality rank based on... (max quality = 4pts)
@@ -290,17 +305,12 @@ Rename and reorganize columns
 #remove unnecessary columns
 df1<-c.df2[,c('obsID','traitCat','invType','cwmCalc',
               'invadedArea_invasiveSp','nativeArea_invasiveSp','invadedArea_nativeSp','nativeArea_nativeSp',
-              'qualityBins','coverBins','traitBins','qualRank',
+              'qualityBins','binMeasCov','bin1spCov','binOrigTr','binTryGS','qualRank',
               'mean')]
-#View(c.df2)
 #make sure factors are coded as factors
 df1$qualityBins<- as.factor(df1$qualityBins)
-df1$coverBins<- as.factor(df1$coverBins)
-df1$traitBins<- as.factor(df1$traitBins)
 
 #rename columns
-colnames(df1)[which(colnames(df1) == 'coverBins')]<-'qualityCover'
-colnames(df1)[which(colnames(df1) == 'traitBins')]<-'qualityTrait'
 colnames(df1)[which(colnames(df1) == 'cwmCalc')]<-'qualityCWMcalc'
 colnames(df1)[which(colnames(df1) == 'InvArea')]<-'inv_trMean'
 colnames(df1)[which(colnames(df1) == 'InvSpInvArea')]<-'invINinv_trMean'
@@ -323,6 +333,7 @@ sub<-subset(df1, traitCat == 'percN' & cwm >5)
 _________________________________________________________________
 # 6. EXPORT
 ```{r clean5,echo=TRUE, message=FALSE, warning=FALSE}
+#View(df1)
 newfilename<-'cwm.txt'
 write.table(df1, file=paste(synthdataPath,newfilename, sep='/'), sep='\t') 
 ```

@@ -3,8 +3,8 @@
 
 ### Load Fxns and Libraries ####################################################
 source('CODE/cwm/fxn_idHelpers.R') # for AddTraitOI
-library(plyr) #for ddply
-library(doBy) # for orderBy
+require(plyr) #for ddply
+require(doBy) # for orderBy
 
 
 #1. Subset tryDataT by the traits of interest (traitID) and add indexing column

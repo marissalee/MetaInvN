@@ -1,0 +1,13 @@
+"traitCat"	"invType"	"nCWMs"	"nCWMs_calculated"	"nCWMs_reported"	"total.check"
+"1"	"cn"	"InvArea"	212	198	14	212
+"2"	"cn"	"InvSpInvArea"	208	198	10	208
+"3"	"cn"	"NatArea"	155	141	14	155
+"4"	"littercn"	"InvArea"	60	40	20	60
+"5"	"littercn"	"InvSpInvArea"	47	40	7	47
+"6"	"littercn"	"NatArea"	54	34	20	54
+"7"	"litterpercN"	"InvArea"	66	42	24	66
+"8"	"litterpercN"	"InvSpInvArea"	50	42	8	50
+"9"	"litterpercN"	"NatArea"	59	35	24	59
+"10"	"percN"	"InvArea"	342	316	26	342
+"11"	"percN"	"InvSpInvArea"	364	316	48	364
+"12"	"percN"	"NatArea"	320	295	25	320

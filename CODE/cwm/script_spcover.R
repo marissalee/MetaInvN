@@ -4,8 +4,8 @@
 
 
 ### Load libraries ####################################################
-library(doBy) #for orderBy
-library(reshape) #for untable()
+require(doBy) #for orderBy
+require(reshape) #for untable()
 #source('rmdCode/paperData/fxn_loadHelpers.R') 
 source('CODE/cwm/fxn_idHelpers.R') 
 
@@ -65,6 +65,8 @@ splist<-strsplit(as.character(cover.sub.Xsp$covSpEntryID), ',')
 expanded<-untable(cover.sub.Xsp, num=cover.sub.Xsp[,'numsp']) #need library(reshape), use the column with the number of species to expand the table
 dim(expanded)
 expanded$covSpEntryID<-as.numeric(unlist(splist)) #update the covSpEntryID that is specific to each row in this expanded table
+#View(expanded)
+
 
 # divide each cover value (inv and nat) by the numsp to get the new cover value (ex: new.covInvMean)
 # remember that ... Var(aX) = a^2 * Var(X)
@@ -119,8 +121,6 @@ nonMatchingSPID<-data.frame(species=spI[!as.character(spI[,'spName']) == as.char
 nonMatchingSPID #none now.
 
 
-
-
 ### Update 1sp datatable with species name columns ####################################################
 
 # add names based on cover$spID
@@ -131,7 +131,6 @@ for(i in 1:length(SPID)){
   row<-species[which(species$spID == SPID[i]),c('GenusSpecies','Genus','Species')]
   cover.sub.1sp[cover.sub.1sp$spID == SPID[i],c('GenusSpecies','Genus','Species')] <- row
 }
-#View(cover.sub.1sp)
 
 
 

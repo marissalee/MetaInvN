@@ -12,8 +12,8 @@ output: pdf_document
 3. Summarize the trait data file
 other. Clean and export trait meta-data
 ```{r libraries, echo=TRUE}
-knitr::opts_chunk$set(cache=TRUE)
-library(plyr)
+#knitr::opts_chunk$set(cache=TRUE)
+require(plyr)
 synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "tryData") #where to put the clean dataframes
 ```
 
@@ -32,6 +32,7 @@ data$ObsDataID<-as.factor(data$ObsDataID)
 data$TraitID<-as.factor(data$TraitID)
 data$DataID<-as.factor(data$DataID)
 data$OrigObsDataID<-as.factor(data$OrigObsDataID)
+data$LastName<-as.character(data$LastName)
 
 #3. General Info about the dataset/Column headers
 #LastName
@@ -186,7 +187,6 @@ new.name.tab<-ldply(new.name.list)
 
 tdIndex<-data.frame(traitID=new.id.tab$traitID, traitName=new.name.tab$traitName, 
            dataID=new.id.tab$dataID, dataName=new.name.tab$dataName)
-#tdIndex
 
 
 ### Make a list for the corresponding Units ####################################################
@@ -240,6 +240,7 @@ tdIndex[tdIndex$dataName %in% dataName_n1$dataName, 'traitOI'] <- traitOI<-c('pe
 # Export dataframe
 newfilename<-'tryData_traitKey.txt'
 write.table(tdIndex, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
 ```
 
 _________________________________________________________________

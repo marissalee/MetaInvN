@@ -34,25 +34,4 @@ mytheme <- theme_bw(base_size = 10, base_family = "Helvetica") +
         plot.title=element_text(hjust=0, vjust=0.5, face='bold'), #style and position of the panel label
         plot.margin = unit(c(0.05,0.05,0.05,0.05),"in")
         )
-  
-#add pretty facet labels
-facet_wrap_labeller <- function(gg.plot,labels=NULL) {
-  #works with R 3.0.1 and ggplot2 0.9.3.1
-  
-  require(gridExtra)
-  
-  g <- ggplotGrob(gg.plot)
-  gg <- g$grobs      
-  strips <- grep("strip_t", names(gg))
-  
-  for(ii in seq_along(labels))  {
-    modgrob <- getGrob(gg[[strips[ii]]], "strip.text", 
-                       grep=TRUE, global=TRUE)
-    gg[[strips[ii]]]$children[[modgrob$name]] <- editGrob(modgrob,label=labels[ii])
-  }
-  
-  g$grobs <- gg
-  
-  class(g) = c("arrange", "ggplot",class(g)) 
-  g
-}
+

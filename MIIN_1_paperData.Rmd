@@ -16,18 +16,17 @@ output: pdf_document
   
 3. Look for issues and outliers in all datasets  
 
-4. Export all cleaned datasets to DATA_SYNTHESIZED/paperData folder and histogram plots to FIGURES_TABLES/paperData
+4. Export all cleaned datasets to DATA SYNTHESIZED/paperData folder and histogram plots to FIGURES TABLES/paperData
 
 ```{r libraries, echo=TRUE}
-knitr::opts_chunk$set(cache=TRUE)
-library(reshape2)
-library(ggplot2)
-library(ggthemes)
-source('CODE/mytheme.R')
+#knitr::opts_chunk$set(cache=TRUE)
+source('CODE/mytheme.R') #this requires ggplot2 and grid
+
 figuresPath<-file.path(getwd()[1], "FIGURES_TABLES", "paperData") #where to put the saved plots
 fig.height<-2.5 #inches
 fig.width<- 2.5 #inches
 fig.res<-300
+
 synthdataPath<-file.path(getwd()[1], "DATA", "DATA_SYNTHESIZED", "paperData") #where to put the clean dataframes
 ```
 
@@ -147,6 +146,7 @@ m.df[grepl("stdmean",m.df$variable),'valueType']<-'mean_std'
 m.df[grepl("stdvar",m.df$variable),'valueType']<-'var_std'
 m.df[m.df$variable %in% c('covNatN','covInvN'),'valueType']<-'n'
 #cast
+require(reshape2)
 c.df<-dcast(m.df, covID+invType~ valueType)
 idCols<-grepl("Inv",colnames(df)) | grepl("Nat",colnames(df))
 idCols[colnames(df)=='covInvasive']<-FALSE
@@ -163,6 +163,11 @@ pHist_cover_Std<-ggplot(data=cover.clean, aes(x=mean_std, fill=covQuality)) + my
   facet_wrap(~covCat, scales='free', ncol=1) + geom_histogram()+
   scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of cover values\nUnits standardized')
 pHist_cover_Std
+
+#summary of the number obsIDs per each cover measurement type and cover quality type
+ddply(cover.clean, ~covCat+covQuality, summarise,
+      nObs=length(obsID))
+
 
 ##########
 # TRAITS
@@ -190,6 +195,11 @@ pHist_traits_Std<-ggplot(data=traits.clean, aes(x=mean_std,fill=aggStatus)) + my
   scale_y_continuous(expand = c(0,0)) + 
   ggtitle('Histogram of species trait values extracted from original papers\nUnits standardized')
 pHist_traits_Std
+
+#summary of the number obsIDs per each species' trait measurement type and whether or not it needed to be aggregated (e.g. by time) within the study
+ddply(traits.clean, ~traitCat+aggStatus, summarise,
+      nObs=length(obsID))
+
 # FOR TRAITS - examine outliers
 #percN
 sub<-subset(traits.clean, traitCat == 'sp_percN' & !is.na(mean_std) & mean_std > 5)
@@ -206,6 +216,10 @@ pHist_traits_Std_OR<-ggplot(data=traits.clean, aes(x=mean_std,fill=aggStatus)) +
   scale_y_continuous(expand = c(0,0)) + 
   ggtitle('Histogram of species trait values extracted from original papers\nUnits standardized and outliers excluded')
 pHist_traits_Std_OR
+
+#summary of the number obsIDs per each species' trait measurement type and whether or not it needed to be aggregated (e.g. by time) within the study
+ddply(traits.clean, ~traitCat+aggStatus, summarise,
+      nObs=length(obsID))
 
 ##########
 # MEASURES (ALL)
@@ -322,6 +336,12 @@ pHist_meas_Std<-ggplot(data=df.sub, aes(x=value, fill=YN)) + mytheme +
                              "NoAgg.Conv" = "blue",
                              "NoAgg.NoConv" = "black"))
 pHist_meas_Std
+
+#summary of the number obsIDs per each
+ddply(df.sub, ~measCat+YN, summarise,
+      nObs=length(obsID))
+
+
 #nh: none, good
 sub<-subset(meas, measCat == 'nh' & value < 0)
 sub<-subset(meas, measCat == 'nh' & value > 40)
@@ -393,6 +413,12 @@ pHist_meas_Std_OR<-ggplot(data=df.sub, aes(x=value.logt,fill=YN)) + mytheme +
   xlab('Measurement Value') + ylab('Frequency') +
   ggtitle('Histogram of measurement values\nUnits standardized and outliers removed')
 pHist_meas_Std_OR
+
+#summary of the number obsIDs per each
+ddply(df.sub, ~measCat, summarise,
+      nObs=length(obsID))
+
+
 ```
 
 _________________________________________________________________
@@ -413,44 +439,15 @@ write.table(species, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
 # COVER
 newfilename<-'cover_procd.txt'
 write.table(cover, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
-newfilename<-'pHist_cover_Std.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*1.5, height = fig.height*3, res=fig.res)
-pHist_cover_Std
-dev.off()
 
 # TRAITS
 newfilename<-'traits_procd.txt'
 write.table(traits.clean, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
-newfilename<-'pHist_traits_Std.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*2.5, height = fig.height*2, res=fig.res)
-pHist_traits_Std
-dev.off()
-newfilename<-'pHist_traits_Std_OR.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*2.5, height = fig.height*2, res=fig.res)
-pHist_traits_Std_OR
-dev.off()
 
 # MEASURES
 newfilename<-'measures_procd.txt'
 write.table(measures, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
-newfilename<-'pHist_meas_NStd.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3.5, height = fig.height*4, res=fig.res)
-pHist_meas_NStd
-dev.off()
-newfilename<-'pHist_meas_Std.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3.5, height = fig.height*4, res=fig.res)
-pHist_meas_Std
-dev.off()
-newfilename<-'pHist_meas_Std_OR.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3.5, height = fig.height*4, res=fig.res)
-pHist_meas_Std_OR
-dev.off()
+
 ```
 
 

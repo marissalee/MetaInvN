@@ -1,0 +1,27 @@
+"ecosyst"	"sourceOverlap"	"numObs"	"stud"	"nfix"
+"1"	"forest"	"NewPaper"	71	NA	NA
+"2"	"forest"	"PaperInPreviousMeta"	52	NA	NA
+"3"	"grassland"	"NewPaper"	90	NA	NA
+"4"	"grassland"	"PaperInPreviousMeta"	86	NA	NA
+"5"	"other"	"NewPaper"	2	NA	NA
+"6"	"other"	"PaperInPreviousMeta"	2	NA	NA
+"7"	"shrubland"	"NewPaper"	51	NA	NA
+"8"	"shrubland"	"PaperInPreviousMeta"	22	NA	NA
+"9"	"wetland"	"NewPaper"	11	NA	NA
+"10"	"wetland"	"PaperInPreviousMeta"	17	NA	NA
+"11"	NA	"NewPaper"	33	"field expt addition"	NA
+"12"	NA	"PaperInPreviousMeta"	12	"field expt addition"	NA
+"13"	NA	"NewPaper"	17	"field expt removal"	NA
+"14"	NA	"PaperInPreviousMeta"	8	"field expt removal"	NA
+"15"	NA	"NewPaper"	118	"field study"	NA
+"16"	NA	"PaperInPreviousMeta"	155	"field study"	NA
+"17"	NA	"NewPaper"	57	"greenhouse expt"	NA
+"18"	NA	"PaperInPreviousMeta"	4	"greenhouse expt"	NA
+"19"	NA	"NewPaper"	14	NA	"Invasive and resident N-fixers"
+"20"	NA	"PaperInPreviousMeta"	6	NA	"Invasive and resident N-fixers"
+"21"	NA	"NewPaper"	22	NA	"Invasive N-fixers only"
+"22"	NA	"PaperInPreviousMeta"	29	NA	"Invasive N-fixers only"
+"23"	NA	"NewPaper"	173	NA	"No N-fixers"
+"24"	NA	"PaperInPreviousMeta"	122	NA	"No N-fixers"
+"25"	NA	"NewPaper"	16	NA	"Resident N-fixers only"
+"26"	NA	"PaperInPreviousMeta"	22	NA	"Resident N-fixers only"

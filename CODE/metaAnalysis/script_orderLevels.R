@@ -18,10 +18,10 @@ measTab<-data.frame(MEASCAT,labels)
 ## Do some cleaning for the factor analyses ######################################################
 
 #Quality
-dat$CWMDiff_qualRank<-dat$InvArea_qualRank+dat$NatArea_qualRank
 dat$InvSpInvArea_qualRank<-factor(dat$InvSpInvArea_qualRank)
 dat$NatArea_qualRank<-factor(dat$NatArea_qualRank)
 dat$CWMDiff_qualRank<-factor(dat$CWMDiff_qualRank)
+dat$CWMDiff2_qualRank<-factor(dat$CWMDiff2_qualRank)
 
 #Ecosystem
 #unique(dat$ecosystCat)
@@ -54,7 +54,7 @@ dat$Nfix <- factor(dat$Nfix,
 
 TRAIT<-c("percN", "litterpercN", "cn", "littercn")
 dat$traitCat <- factor(dat$traitCat, levels = TRAIT)
-PLANT<-c('InvSpInvArea_cwm', 'NatArea_cwm', 'CWMDiff_cwm')
+PLANT<-c('InvSpInvArea_cwm', 'NatArea_cwm', 'CWMDiff_cwm','CWMDiff2_cwm')
 
 
 

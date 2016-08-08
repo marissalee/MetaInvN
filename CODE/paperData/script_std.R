@@ -3,8 +3,8 @@
 
 
 ### Load Fxns and Libraries ####################################################
-library(plyr) #for ddply
-library(doBy) # for orderBy
+require(plyr) #for ddply
+require(doBy) # for orderBy
 source('CODE/paperData/fxn_ConvertVar.R') # for FixVarTypes.Row()
 source('CODE/paperData/fxn_FixUnits.R') # for FixUnits()
 

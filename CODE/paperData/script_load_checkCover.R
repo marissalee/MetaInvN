@@ -30,7 +30,7 @@ cover.sub.Xsp[cover.sub.Xsp$numsp==1,'covDescript'] # its ok; although there is 
 
 ##C. For cover data where there is more than 1 species, expand the table to fit each species in its own row
 splist<-strsplit(as.character(cover.sub.Xsp$covSpEntryID), ',') # strsplit the covSpEntryID string and count the number of species (numsp)
-library(reshape)
+require(reshape)
 expanded<-untable(cover.sub.Xsp, num=cover.sub.Xsp[,'numsp']) #need library(reshape), use the column with the number of species to expand the table
 expanded$covSpEntryID<-as.numeric(unlist(splist)) #update the covSpEntryID that is specific to each row in this expanded table
 expanded$spID<-paste(expanded$obsID, expanded$covSpEntryID, sep='.') #identify the spIDs by pasting the obsID and the SpEntryID listed in 'cover'
@@ -60,6 +60,7 @@ spIndex<-species[,c('spID','spName')]
 covIndex<-ddply(cover, ~spID, summarise, spnam = paste(unique(covDescript),collapse='___'))
 dim(spIndex[spIndex$spID %in% covIndex$spID,]); dim(covIndex[covIndex$spID %in% spIndex$spID,]); dim(covIndex) #link up the dimensions
 covIndex[!covIndex$spID %in% spIndex$spID,] # the covIndex has spIDs that are not in the species dataframe because these are ones where spID = NA
+require(doBy)
 spI<-orderBy(~spID, spIndex[spIndex$spID %in% covIndex$spID,])
 covI<-orderBy(~spID, covIndex[covIndex$spID %in% spIndex$spID,])
 

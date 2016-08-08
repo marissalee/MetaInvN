@@ -1,37 +1,37 @@
-"plantType"	"traitType"	"measType"	"studies"	"pR2"	"est"	"pVal"
-"InvSpInvArea_cwm"	"percN"	"nh"	122	0	0.01	0.91
-"InvSpInvArea_cwm"	"percN"	"no"	128	0	0.07	0.43
-"InvSpInvArea_cwm"	"percN"	"toti"	173	0	0.09	0.2
-"InvSpInvArea_cwm"	"percN"	"ammonif"	38	0.01	0.1	0.45
-"InvSpInvArea_cwm"	"percN"	"nitrif"	67	0.01	0.15	0.25
-"InvSpInvArea_cwm"	"percN"	"nminz"	84	0	0.01	0.89
-"InvSpInvArea_cwm"	"percN"	"soiln"	170	0.02	0.34	0
-"InvSpInvArea_cwm"	"percN"	"soilcn"	89	0.02	-0.2	0.03
-"InvSpInvArea_cwm"	"percN"	"som"	88	0.01	0.27	0.09
-"InvSpInvArea_cwm"	"litterpercN"	"nh"	19	0.01	0.17	0.53
-"InvSpInvArea_cwm"	"litterpercN"	"no"	20	0	-0.01	0.97
-"InvSpInvArea_cwm"	"litterpercN"	"toti"	21	0.02	0.51	0.26
-"InvSpInvArea_cwm"	"litterpercN"	"ammonif"	13	0.14	0.91	0.11
-"InvSpInvArea_cwm"	"litterpercN"	"nitrif"	16	0.03	0.67	0.23
-"InvSpInvArea_cwm"	"litterpercN"	"nminz"	15	0	0.07	0.93
-"InvSpInvArea_cwm"	"litterpercN"	"soiln"	27	0.02	0.5	0.17
-"InvSpInvArea_cwm"	"litterpercN"	"soilcn"	10	0.22	-0.46	0.05
-"InvSpInvArea_cwm"	"litterpercN"	"som"	19	0	0.14	0.8
-"InvSpInvArea_cwm"	"cn"	"nh"	64	0.01	-0.02	0.24
-"InvSpInvArea_cwm"	"cn"	"no"	75	0	0	0.98
-"InvSpInvArea_cwm"	"cn"	"toti"	97	0.01	-0.01	0.28
-"InvSpInvArea_cwm"	"cn"	"ammonif"	19	0.02	0.01	0.41
-"InvSpInvArea_cwm"	"cn"	"nitrif"	38	0.01	0	0.51
-"InvSpInvArea_cwm"	"cn"	"nminz"	59	0	0	0.72
-"InvSpInvArea_cwm"	"cn"	"soiln"	101	0.01	-0.01	0.28
-"InvSpInvArea_cwm"	"cn"	"soilcn"	70	0.01	0	0.35
-"InvSpInvArea_cwm"	"cn"	"som"	28	0.02	0.03	0.21
-"InvSpInvArea_cwm"	"littercn"	"nh"	11	0.03	-0.02	0.33
-"InvSpInvArea_cwm"	"littercn"	"no"	12	0.02	-0.02	0.24
-"InvSpInvArea_cwm"	"littercn"	"toti"	14	0.04	-0.01	0.27
-"InvSpInvArea_cwm"	"littercn"	"ammonif"	7	0.13	-0.01	0.48
-"InvSpInvArea_cwm"	"littercn"	"nitrif"	14	0.01	-0.01	0.51
-"InvSpInvArea_cwm"	"littercn"	"nminz"	16	0.02	-0.01	0.38
-"InvSpInvArea_cwm"	"littercn"	"soiln"	20	0.02	-0.02	0.38
-"InvSpInvArea_cwm"	"littercn"	"soilcn"	12	0.04	0.01	0.55
-"InvSpInvArea_cwm"	"littercn"	"som"	13	0.05	-0.03	0.12
+"plantType"	"traitType"	"measType"	"studies"	"est"	"pVal"	"pseudoR2.1"	"pseudoR2.2"	"pseudoR2.perc"
+"InvSpInvArea_cwm"	"percN"	"nh"	122	0.01	0.895913815395929	0	0	0
+"InvSpInvArea_cwm"	"percN"	"no"	128	0.07	0.441751741776888	0.0194489550461261	0	0
+"InvSpInvArea_cwm"	"percN"	"toti"	173	0.09	0.200052061886147	0.00888124447511494	0	0
+"InvSpInvArea_cwm"	"percN"	"ammonif"	38	0.12	0.424119491879844	0	0	0
+"InvSpInvArea_cwm"	"percN"	"nitrif"	67	0.14	0.291843959656904	0.0583754473942119	0.0984270841027724	0
+"InvSpInvArea_cwm"	"percN"	"nminz"	84	0.01	0.908943796136781	0	0	0
+"InvSpInvArea_cwm"	"percN"	"soiln"	170	0.34	0.000401231858740563	0.000336679084308657	0.254944116343886	0.0913355263145769
+"InvSpInvArea_cwm"	"percN"	"soilcn"	89	-0.2	0.0377186133269791	0.14089062539298	0.815647553632832	0
+"InvSpInvArea_cwm"	"percN"	"som"	88	0.27	0.0980545777883977	0.109858674010893	0	0.711521661996784
+"InvSpInvArea_cwm"	"litterpercN"	"nh"	19	0.56	0.170383910797665	0	0.866774551775257	0
+"InvSpInvArea_cwm"	"litterpercN"	"no"	20	-0.01	0.97084017739575	0	0	0
+"InvSpInvArea_cwm"	"litterpercN"	"toti"	21	0.51	0.282109102720885	0	0	0
+"InvSpInvArea_cwm"	"litterpercN"	"ammonif"	13	0.86	0.129545212333957	0.830344666537338	0	0
+"InvSpInvArea_cwm"	"litterpercN"	"nitrif"	16	0.81	0.187502583452667	0	0.999999352138366	0.801379554894885
+"InvSpInvArea_cwm"	"litterpercN"	"nminz"	15	0.04	0.959634365462092	0	0	1.33067735541175
+"InvSpInvArea_cwm"	"litterpercN"	"soiln"	27	0.51	0.190693171783841	0.0466322012704053	0.000389725323585193	0.473099781807419
+"InvSpInvArea_cwm"	"litterpercN"	"soilcn"	10	-0.46	0.0483507853406666	0.999999996806925	0.996903103344476	0.0309355546195648
+"InvSpInvArea_cwm"	"litterpercN"	"som"	19	0.11	0.861956922612015	0	0	2.32395021118119
+"InvSpInvArea_cwm"	"cn"	"nh"	64	-0.02	0.250097848677938	0	0.0618552066784437	0
+"InvSpInvArea_cwm"	"cn"	"no"	75	0	0.96924786485926	0	0	0
+"InvSpInvArea_cwm"	"cn"	"toti"	97	-0.01	0.275880259102437	0	0.301824970930146	0
+"InvSpInvArea_cwm"	"cn"	"ammonif"	19	0.01	0.412601292466396	0.999999909175714	0.279922285507861	0.0117495943090667
+"InvSpInvArea_cwm"	"cn"	"nitrif"	38	0	0.539308927301327	0	0	0
+"InvSpInvArea_cwm"	"cn"	"nminz"	59	0	0.710920487735885	0	0	0
+"InvSpInvArea_cwm"	"cn"	"soiln"	101	-0.01	0.278396226374611	0	0	0
+"InvSpInvArea_cwm"	"cn"	"soilcn"	70	0	0.368632599066374	0.00167016350197202	0	0
+"InvSpInvArea_cwm"	"cn"	"som"	28	0.03	0.246332563841357	0.19662418635069	0	0
+"InvSpInvArea_cwm"	"littercn"	"nh"	11	-0.02	0.36214398351152	0.229610665303128	0	0
+"InvSpInvArea_cwm"	"littercn"	"no"	12	-0.03	0.605544358320255	0	0	0
+"InvSpInvArea_cwm"	"littercn"	"toti"	14	-0.01	0.338122347442165	0	0.229579018206828	0
+"InvSpInvArea_cwm"	"littercn"	"ammonif"	7	-0.01	0.476166323058361	0.99999993057038	0	0.00140737343251686
+"InvSpInvArea_cwm"	"littercn"	"nitrif"	14	-0.01	0.576512524264189	0	0.0778124590086624	0
+"InvSpInvArea_cwm"	"littercn"	"nminz"	16	-0.01	0.444485367044731	0	0	0
+"InvSpInvArea_cwm"	"littercn"	"soiln"	20	-0.02	0.408549217472268	0	0.0216638887902747	0
+"InvSpInvArea_cwm"	"littercn"	"soilcn"	12	NA	NA	NA	NA	NA
+"InvSpInvArea_cwm"	"littercn"	"som"	13	-0.03	0.182082589631753	0.272837652157816	0	0.341321881587843

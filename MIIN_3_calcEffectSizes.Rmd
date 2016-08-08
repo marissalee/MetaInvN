@@ -16,12 +16,11 @@ output: pdf_document
 4. Export dataframes
 
 ```{r libraries, echo=TRUE}
-knitr::opts_chunk$set(cache=TRUE)
-
-library(plyr)
-library(reshape2)
-library(ggplot2)
-library(metafor)
+#knitr::opts_chunk$set(cache=TRUE)
+require(plyr)
+require(reshape2)
+require(ggplot2)
+require(metafor)
 
 source('CODE/mytheme.R')
 
@@ -42,8 +41,10 @@ measures<-read.table("DATA/DATA_SYNTHESIZED/paperData/measures_procd.txt", heade
 
 #data synthesized by *MIIN_2_cwm.Rmd*
 cwm<-read.table("DATA/DATA_SYNTHESIZED/cwm/cwm.txt", header=TRUE, sep="\t")
+cwm.quality<-read.table("DATA/DATA_SYNTHESIZED/cwm/cwm_quality.txt", header=TRUE, sep="\t")
 spIDcover<-read.table("DATA/DATA_SYNTHESIZED/cwm/spIDcover.txt", header=TRUE, sep="\t")
 spIDtraits<-read.table("DATA/DATA_SYNTHESIZED/cwm/spIDtraits.txt", header=TRUE, sep="\t")
+numberOfSpecies.cwm<-read.table("DATA/DATA_SYNTHESIZED/cwm/numberOfSpecies_cwm.txt", header=TRUE, sep="\t")
 
 #read-in the list of Frankia and Rhizobia-associated plant genera
 nfixGenera<-read.table("DATA/NfixingPlantGenera.txt", header=TRUE, sep="\t")
@@ -62,6 +63,7 @@ exclude.1inv<-summ.spp[summ.spp$numInvspp == 0,'obsID']
 exclude.1nonfoc<-summ.spp[summ.spp$numNonFocal == 0,'obsID']
 exclude.tmp<-c(exclude.1inv,exclude.1nonfoc)
 exclude.obsID<-unique(exclude.tmp)
+exclude.obsID
 
 paste('Exclude',length(exclude.obsID), 'observations because there is not at least 1 species that is invasive, exotic, AND focal')
 
@@ -78,6 +80,8 @@ measures1<-subset(measures, obsID %in% obsOK)
 
 #subset the dfs from cwm
 cwm1<-subset(cwm, obsID %in% obsOK)
+cwm.quality1<-subset(cwm.quality, obsID %in% obsOK)
+numberOfSpecies.cwm1<-subset(numberOfSpecies.cwm, obsID %in% obsOK)
 spTOobs<-function(df){ #first, need to convert the spID to an obsID column in these dfs
   tmp<-ldply(strsplit(as.character(df[,'spID']), ".", fixed=T))
   df[,'obsID']<-paste(tmp[,1],tmp[,2], sep=".")
@@ -102,7 +106,6 @@ papers1<-papers
 1B. Remove ancillary soil measurements that will not be used in the meta-analysis. 
 ```{r removeMeas,echo=TRUE, warning=FALSE, message=FALSE}
 summ.meas <- ddply(measures1,~measCat,summarise, numObs=length(unique(obsID)))
-summ.meas
 
 removeMeasCats<-c('biom','litterbiom','plantcov',
                   'cn','littercn','percN','litterpercN',
@@ -206,13 +209,16 @@ species.c<-species1
 traits.c<-traits1
 measures.c<-measures3
 cwm.c<-cwm1
+cwm.quality.c<-cwm.quality1
 spIDcover.c<-spIDcover1
 spIDtraits.c<-spIDtraits1
+numberOfSpecies.cwm.c<-numberOfSpecies.cwm1
 ```
 
 _________________________________________________________________
 # 2. Calculate invasion effect sizes and create a composite dataset for analyses (observations, measures, cwm)
 To calculate invasion effect sizes, use measurement values that have not been unit-standardized.  Calculate effect sizes using the "standard mean difference" (SMD).
+ALSO -- this is where I calculate the difference in CWMs
 ```{r calcES,echo=TRUE, warning=FALSE, message=FALSE}
 chooseMeasType<-'nonSTD' #decide whether to use standardized/non-standardized soil measurement values
 chooseESType<-'SMD' #decide whether to use ROM or SMD to calculate effect sizes
@@ -266,12 +272,15 @@ dat.obs1<-dat.obs[,c('paperID','obsID','measCat',
 ### Re-organize cwm data and prep for merging ######################################################
 #recast cwm so that type of CWM values are in the same row
 cwm.tmp<-cwm.c[,c('obsID','traitCat','invType','qualRank','cwm')]
-m.cwm.tmp<-melt(cwm.tmp, id.vars=c('obsID', 'traitCat','invType'))
+m.cwm.tmp<-melt(cwm.tmp, id.vars=c('obsID', 'traitCat','invType')) #uses reshape2
 c.cwm.tmp<-dcast(m.cwm.tmp, obsID+traitCat~invType+variable)
 #View(c.cwm.tmp)
 
 #calculate the raw difference of invaded and native area cwm trait values
 c.cwm.tmp$CWMDiff_cwm<-c.cwm.tmp$InvArea_cwm - c.cwm.tmp$NatArea_cwm
+
+#calculate the raw difference of invasive species in invaded area and native area cwm trait values
+c.cwm.tmp$CWMDiff2_cwm<-c.cwm.tmp$InvSpInvArea_cwm - c.cwm.tmp$NatArea_cwm
 
 ### Combine the selected measurement ES values and obsID info with CWM data ######################################################
 #add cwm data to measures
@@ -283,7 +292,11 @@ dat.all<-merge(dat.obs1, c.cwm.tmp, by='obsID', all=TRUE)
 #paste(length(unique(dat.all$obsID)), 'observations')
 
 ### Calculate the effect sizes ######################################################
-dat1 <- escalc(measure=chooseESType, m1i=m1i, sd1i=sd1i, n1i=n1i, m2i=m2i, sd2i=sd2i, n2i=n2i, data=dat.all) 
+dat1 <- escalc(measure=chooseESType, m1i=m1i, sd1i=sd1i, n1i=n1i, m2i=m2i, sd2i=sd2i, n2i=n2i, data=dat.all)  #uses metafor
+
+### last, carry over the quality ranks for CWMDiff values
+dat1$CWMDiff_qualRank<-dat1$InvArea_qualRank + dat1$NatArea_qualRank
+dat1$CWMDiff2_qualRank<-dat1$InvSpInvArea_qualRank + dat1$NatArea_qualRank
 ```
 
 _________________________________________________________________
@@ -309,16 +322,19 @@ summ<-ddply(dat1, ~obsID+traitCat, summarize,
       uniqInvSpInvArea = length(unique(InvSpInvArea_cwm)),
       uniqNatArea = length(unique(NatArea_cwm)),
       uniqCWMDiff = length(unique(CWMDiff_cwm)),
-      total = sum(uniqInvArea, uniqInvSpInvArea,uniqNatArea,uniqCWMDiff))
-sum(summ$total != 4) # if 0, then obsID + traitCat produces all unique rows
+      uniqCWMDiff2 = length(unique(CWMDiff2_cwm)),
+      total = sum(uniqInvArea, uniqInvSpInvArea, uniqNatArea, uniqCWMDiff, uniqCWMDiff2))
+#sum(summ$total != 5) # if 0, then obsID + traitCat produces all unique rows
+
 dat1.tr<-ddply(dat1, ~obsID+traitCat, summarize,
                InvArea = unique(InvArea_cwm),
                InvSpInvArea = unique(InvSpInvArea_cwm),
                NatArea = unique(NatArea_cwm),
-               CWMDiff = unique(CWMDiff_cwm))
+               CWMDiff = unique(CWMDiff_cwm),
+               CWMDiff2 = unique(CWMDiff2_cwm))
 #head(dat1.tr) #each row is a unique obsID x traitCat
 
-#summarize dataset by unique obsID+traitCats+variable (where variable == c(InvArea, InvSpInvArea, NatArea, CWMDiff)
+#summarize dataset by unique obsID+traitCats+variable (where variable == c(InvArea, InvSpInvArea, NatArea, CWMDiff, CWMDiff2)
 m.dat1.tr<-melt(dat1.tr, id.vars=c('obsID', 'traitCat')) 
 #head(m.dat1.tr) #each row is a unique obsID x traitCat x variable
 #sum(is.na(m.dat1.tr$traitCat)) #combination is not fully factorial, so there are NAs here
@@ -331,12 +347,7 @@ dat1.meas_tmp<-dat1.meas[!is.na(dat1.meas$yi),]
 
 pHist_ES<-ggplot(dat1.meas_tmp, aes(x=yi)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of effect size values')
-
-newfilename<-'pHist_ES.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
 pHist_ES
-dev.off()
 
 #get rid of outliers
 #nh
@@ -372,130 +383,176 @@ png(paste(figuresPath,newfilename, sep='/'),
 pHist_ES_OR
 dev.off()
 ```
-3C. Distribution of unit-standardized soil measurement values
-```{r distMeas, echo=TRUE, warning=FALSE, message=FALSE}
-#m1i (invaded area soil measurements)
-pHist_measInv<-ggplot(dat1.meas, aes(x=m1i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
-  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of invaded area soil measurement values')
-pHist_measInv
-newfilename<-'pHist_measInv.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
-pHist_measInv
-dev.off()
-
-#m2i (reference area soil measurements)
-pHist_measRef<-ggplot(dat1.meas, aes(x=m2i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
-  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of reference area soil measurement values')
-pHist_measRef
-newfilename<-'pHist_measRef.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
-pHist_measRef
-dev.off()
-
-#Log-transform some measurements
-# logtMeas<-c('nh','no','toti','soilmoi','som','soiln', 'biom', 'litterbiom','littercn', 'litterpercN','percN')
-logtMeas<-c('nh','no','toti','som','soiln')
-paste('Log-transform the following soil measurement values to improve normality:',paste(logtMeas, collapse=', '))
-nologtMeas<-unique(dat1$measCat)[!unique(dat1$measCat) %in% logtMeas]
-SD.logt<-function(meanval, sdval){ #function that corrects the variance values associated with each observation mean value that is log-transformed
-  varval<-(sdval)^2
-  sd.logt<-sqrt(log10(1+varval/(meanval)^2))
-  return(sd.logt)
-}
-dat1$m1i_logt<-log10(dat1$m1i) #warning message about NaNs is because of negative rate values
-dat1$sd1i_logt<-SD.logt(meanval=dat1$m1i, sdval=dat1$sd1i)
-dat1$m2i_logt<-log10(dat1$m2i)
-dat1$sd2i_logt<-SD.logt(meanval=dat1$m2i, sdval=dat1$sd2i)
-#put the non-transformed data back into measures that shouldn't be transformed
-dat1[dat1$measCat %in% nologtMeas,'m1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m1i']
-dat1[dat1$measCat %in% nologtMeas,'sd1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd1i']
-dat1[dat1$measCat %in% nologtMeas,'m2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m2i']
-dat1[dat1$measCat %in% nologtMeas,'sd2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd2i']
-
-#update and re-plot
-dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
-                 m1i = unique(m1i_logt),
-                 m2i = unique(m2i_logt),
-                 yi = unique(yi))
-
-pHist_measInv_T<-ggplot(dat1.meas, aes(x=m1i)) + 
-  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
-  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of InvArea unit-std soil meas. values\nLog-transformed')
-newfilename<-'pHist_measInv_T.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
-pHist_measInv_T
-dev.off()
-
-pHist_measRef_T<-ggplot(dat1.meas, aes(x=m2i)) + 
-  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
-  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of NatArea unit-std soil meas. values\nLog-transformed')
-newfilename<-'pHist_measRef_T.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
-pHist_measRef_T
-dev.off()
-
-#get rid of outliers
-#ammonif
-dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
-dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
-#dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
-
-
-#nitrif
-dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
-dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
-#dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
-
-#nminz
-dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),]
-dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
-#dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m2i_logt),]
-
-#update and re-plot
-dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
-                 m1i = unique(m1i_logt),
-                 m2i = unique(m2i_logt),
-                 yi = unique(yi))
-
-pHist_measInv_T_OR<-ggplot(dat1.meas, aes(x=m1i)) + 
-  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
-  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of InvArea unit-std soil meas. values\nLog-transformed and outliers removed')
-pHist_measInv_T_OR
-newfilename<-'pHist_measInv_T_OR.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
-pHist_measInv_T_OR
-dev.off()
-
-pHist_measRef_T_OR<-ggplot(dat1.meas, aes(x=m2i)) + 
-  facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
-  mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of NatArea unit-std soil meas. values\nLog-transformed and outliers removed')
-pHist_measRef_T_OR
-newfilename<-'pHist_measRef_T_OR.png'
-png(paste(figuresPath,newfilename, sep='/'), 
-    units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
-pHist_measRef_T_OR
-dev.off()
-
-paste('Removed outlier effect size values in ammonif, nitrif, nminz.')
-paste('Most unit-std soil meas. values look normally-distributed after log-transforming some measurement types')
+NOT RUN -- 3C. Distribution of unit-standardized soil measurement values
+```{r distMeas, echo=TRUE, warning=FALSE, message=FALSE, include=FALSE}
+# #m1i (invaded area soil measurements)
+# pHist_measInv<-ggplot(dat1.meas, aes(x=m1i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+#   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of invaded area soil measurement values')
+# pHist_measInv
+# 
+# #m2i (reference area soil measurements)
+# pHist_measRef<-ggplot(dat1.meas, aes(x=m2i)) + facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+#   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of reference area soil measurement values')
+# pHist_measRef
+# newfilename<-'pHist_measRef.png'
+# png(paste(figuresPath,newfilename, sep='/'), 
+#     units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+# pHist_measRef
+# dev.off()
+# 
+# #Log-transform some measurements
+# # logtMeas<-c('nh','no','toti','soilmoi','som','soiln', 'biom', 'litterbiom','littercn', 'litterpercN','percN')
+# logtMeas<-c('nh','no','toti','som','soiln')
+# paste('Log-transform the following soil measurement values to improve normality:',paste(logtMeas, collapse=', '))
+# nologtMeas<-unique(dat1$measCat)[!unique(dat1$measCat) %in% logtMeas]
+# SD.logt<-function(meanval, sdval){ #function that corrects the variance values associated with each observation mean value that is log-transformed
+#   varval<-(sdval)^2
+#   sd.logt<-sqrt(log10(1+varval/(meanval)^2))
+#   return(sd.logt)
+# }
+# dat1$m1i_logt<-log10(dat1$m1i) #warning message about NaNs is because of negative rate values
+# dat1$sd1i_logt<-SD.logt(meanval=dat1$m1i, sdval=dat1$sd1i)
+# dat1$m2i_logt<-log10(dat1$m2i)
+# dat1$sd2i_logt<-SD.logt(meanval=dat1$m2i, sdval=dat1$sd2i)
+# #put the non-transformed data back into measures that shouldn't be transformed
+# dat1[dat1$measCat %in% nologtMeas,'m1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m1i']
+# dat1[dat1$measCat %in% nologtMeas,'sd1i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd1i']
+# dat1[dat1$measCat %in% nologtMeas,'m2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'m2i']
+# dat1[dat1$measCat %in% nologtMeas,'sd2i_logt']<-dat1[dat1$measCat %in% nologtMeas,'sd2i']
+# 
+# #update and re-plot
+# dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+#                  m1i = unique(m1i_logt),
+#                  m2i = unique(m2i_logt),
+#                  yi = unique(yi))
+# 
+# pHist_measInv_T<-ggplot(dat1.meas, aes(x=m1i)) + 
+#   facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+#   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of InvArea unit-std soil meas. values\nLog-transformed')
+# newfilename<-'pHist_measInv_T.png'
+# png(paste(figuresPath,newfilename, sep='/'), 
+#     units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+# pHist_measInv_T
+# dev.off()
+# 
+# pHist_measRef_T<-ggplot(dat1.meas, aes(x=m2i)) + 
+#   facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+#   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of NatArea unit-std soil meas. values\nLog-transformed')
+# newfilename<-'pHist_measRef_T.png'
+# png(paste(figuresPath,newfilename, sep='/'), 
+#     units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
+# pHist_measRef_T
+# dev.off()
+# 
+# #get rid of outliers
+# #ammonif
+# dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
+# dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+# #dat1[dat1$measCat=='ammonif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
+# 
+# 
+# #nitrif
+# dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),]
+# dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+# #dat1[dat1$measCat=='nitrif' & dat1$m1i_logt > 50 & !is.na(dat1$m2i_logt),]
+# 
+# #nminz
+# dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),]
+# dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m1i_logt),c('m1i_logt','m2i_logt')]<-NA #replace outlier with NA
+# #dat1[dat1$measCat=='nminz' & dat1$m1i_logt > 100 & !is.na(dat1$m2i_logt),]
+# 
+# #update and re-plot
+# dat1.meas<-ddply(dat1, ~obsID+measCat, summarize,
+#                  m1i = unique(m1i_logt),
+#                  m2i = unique(m2i_logt),
+#                  yi = unique(yi))
+# 
+# pHist_measInv_T_OR<-ggplot(dat1.meas, aes(x=m1i)) + 
+#   facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+#   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of InvArea unit-std soil meas. values\nLog-transformed and outliers removed')
+# pHist_measInv_T_OR
+# 
+# pHist_measRef_T_OR<-ggplot(dat1.meas, aes(x=m2i)) + 
+#   facet_wrap(~measCat, scales='free', ncol=3) + geom_histogram() +
+#   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of NatArea unit-std soil meas. values\nLog-transformed and outliers removed')
+# pHist_measRef_T_OR
+# 
+# paste('Removed outlier effect size values in ammonif, nitrif, nminz.')
+# paste('Most unit-std soil meas. values look normally-distributed after log-transforming some measurement types')
 ```
 3D. Distribution of CWM trait values
 ```{r distCWM, echo=TRUE, warning=FALSE, message=FALSE}
-pHist_cwm<-ggplot(m.dat1.tr1, aes(x=value)) + facet_wrap(~traitCat+variable, scales='free', ncol=4) + geom_histogram() +
+#View(m.dat1.tr1)
+pHist_cwm<-ggplot(m.dat1.tr1, aes(x=value)) + facet_wrap(~traitCat+variable, scales='free', ncol=5) + geom_histogram() +
   mytheme + scale_y_continuous(expand = c(0,0)) + ggtitle('Histogram of cwm trait values or difference values')
 pHist_cwm
+
+#make a pretty set, color coded by if the invader is N-fixing
+tmp<-observations.c[,c("obsID","InvNfix")]
+m.dat1.tr2<-merge(m.dat1.tr1,tmp)
+
+#just invasive sp
+data.invSp<-subset(m.dat1.tr2, variable %in% c("InvSpInvArea","CWMDiff","CWMDiff2"))
+data.invSp$traitCat <- factor(data.invSp$traitCat, levels=traitCat_order)
+data.invSp$traitCat <-mapvalues(data.invSp$traitCat, from = traitCat_order, to = prettylabels.tr)
+
+require(plyr)
+summ.traits<-ddply(m.dat1.tr2, ~variable+traitCat, summarize,
+      n=sum(!is.na(value)),
+      meanTr=mean(value, na.rm=TRUE),
+      stdevTr=sd(value, na.rm=TRUE),
+      seTr=stdevTr/sqrt(n))
+summ.traits
+
+variable_order<-c("InvSpInvArea","CWMDiff","CWMDiff2")
+prettylabels.variable<-c("Invasive sp.","Inv.-Ref. community", "Inv. sp. - Ref. community")
+data.invSp$variable <- factor(data.invSp$variable, levels=variable_order)
+data.invSp$variable <-mapvalues(data.invSp$variable, 
+                                from = variable_order, to = prettylabels.variable)
+
+data.invSp.leaf<-subset(data.invSp, traitCat %in% c("Leaf %N","Leaf C:N"))
+data.invSp.litter<-subset(data.invSp, traitCat %in% c("Litter %N","Litter C:N"))
+
+pHist_invSp.leaf<-ggplot(data.invSp.leaf, aes(x=value, fill=InvNfix)) + 
+  geom_histogram() +
+  facet_grid(variable~traitCat, scale="free") + 
+  mytheme + 
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values=c("black","darkgray"), 
+                    name="Invasive sp.") +
+  ylab('Frequency') + xlab('Value')
+pHist_invSp.leaf
+
+pHist_invSp.litter<-ggplot(data.invSp.litter, aes(x=value, fill=InvNfix)) + 
+  geom_histogram() +
+  facet_grid(variable~traitCat, scale="free") + 
+  mytheme + 
+  scale_y_continuous(expand = c(0,0)) +
+  scale_fill_manual(values=c("black","darkgray"), 
+                    name="Invasive sp.") +
+  ylab('Frequency') + xlab('Value')
+pHist_invSp.litter
+
+
 newfilename<-'pHist_cwm.png'
 png(paste(figuresPath,newfilename, sep='/'), 
     units='in', width = fig.width*3, height = fig.height*6, res=fig.res)
 pHist_cwm
 dev.off()
 
-paste('No outliers removed at this point, but see MIIN_2_cwm.Rmd')
+newfilename<-'pHist_leaf.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*2, height = fig.height*2, res=fig.res)
+pHist_invSp.leaf
+dev.off()
+
+newfilename<-'pHist_litter.png'
+png(paste(figuresPath,newfilename, sep='/'), 
+    units='in', width = fig.width*2, height = fig.height*2, res=fig.res)
+pHist_invSp.litter
+dev.off()
+
+paste('No outliers removed at this point, but they were taken out (if necessary) previously in MIIN_2_cwm.Rmd')
 paste('Most cwm values look normally-distributed - except littercn, probably because there was not very much data')
 ```
 
@@ -523,13 +580,18 @@ write.table(measures.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t'
 newfilename<-'cwm.txt'
 write.table(cwm.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
 
+newfilename<-'cwm_quality.txt'
+write.table(cwm.quality.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
 newfilename<-'spIDcover.txt'
 write.table(spIDcover.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
 
 newfilename<-'spIDtraits.txt'
 write.table(spIDtraits.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
 
-colnames(dat1)
+newfilename<-'numberOfSpecies_cwms.txt'
+write.table(numberOfSpecies.cwm.c, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
+
 newfilename<-'metaDataset.txt'
 write.table(dat1, file=paste(synthdataPath,newfilename, sep='/'), sep='\t')
 ```

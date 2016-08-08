@@ -2,8 +2,8 @@
 #Load raw paper data
 
 ### Load helper fxns and libraries ####################################################
-library(doBy)
-library(plyr)
+#library(doBy)
+#library(plyr)
 
 
 
@@ -96,6 +96,7 @@ summ.spp <- ddply(species,~obsID,summarise,
                   numInv= sum(spInvasive=='invasive'),
                   numExot= sum(spExotic=='exotic'),
                   numFocal= sum(spFocal=='focal'))
+#summ.spp
 dim(summ.spp)
 observations<-merge(observations, summ.spp, by='obsID')
 #View(observations)

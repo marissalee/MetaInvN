@@ -1,0 +1,9 @@
+"traitCat"	"sourceOverlap"	"nObs.Inv"	"nObs.Ref"	"nObs.Diff"
+"1"	"cn"	"NewPaper"	104	76	76
+"2"	"cn"	"PaperInPreviousMeta"	104	79	79
+"3"	"littercn"	"NewPaper"	25	26	26
+"4"	"littercn"	"PaperInPreviousMeta"	22	28	28
+"5"	"litterpercN"	"NewPaper"	16	20	20
+"6"	"litterpercN"	"PaperInPreviousMeta"	34	39	39
+"7"	"percN"	"NewPaper"	197	171	171
+"8"	"percN"	"PaperInPreviousMeta"	167	149	147

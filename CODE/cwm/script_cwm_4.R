@@ -2,8 +2,8 @@
 #Calculate the community-weighted mean for plant traits in invaded and native areas
 
 ### Load libraries and fxns ####################################################
-library(plyr)
-library(reshape2)
+require(plyr)
+require(reshape2)
 
 
 

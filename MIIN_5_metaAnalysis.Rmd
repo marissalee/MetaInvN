@@ -15,17 +15,17 @@ output: pdf_document
 3. Test for correlation between CWM traits and effect size values. Record the outcomes in a table. In cases where the slope coefficient significantly differs from 0, plot it.
 
 ```{r libraries, echo=TRUE}
-knitr::opts_chunk$set(cache=TRUE)
+#knitr::opts_chunk$set(cache=TRUE)
 
-library(ggplot2)
-library(gridExtra)
-library(plyr)
-library(reshape2)
-library(metafor)
+require(ggplot2)
+require(gridExtra)
+require(plyr)
+require(reshape2)
+require(metafor)
 
 source('CODE/mytheme.R')
 source('CODE/metaAnalysis/fxn_PrepForestPlot.R')
-#source('CODE/metaAnalysis/fxn_FactorForests.R') #this is fxn calculated whether each level differed from 0.  no longer needed now that I am calculating and reporting posthoc t-tests
+source('CODE/metaAnalysis/fxn_SaveQstats.R')
 source('CODE/metaAnalysis/fxn_FitPlot.R')
 
 figuresPath<-file.path(getwd()[1], "FIGURES_TABLES", "metaAnalysis") #where to put the saved plots
@@ -33,7 +33,8 @@ fig.height<-2.5 #inches
 fig.width<- 2.5 #inches
 fig.res<-300
 
-dat<-read.table("DATA/DATA_SYNTHESIZED/calcES/metaDataset.txt", header=TRUE, sep="\t")
+dat<-read.table("DATA/DATA_SYNTHESIZED/metaDataset.txt", header=TRUE, sep="\t")
+metaSummary<-read.table("DATA/metaSummary.txt", header=TRUE, sep="\t")
 source('CODE/metaAnalysis/script_orderLevels.R')
 
 #dat structure
@@ -46,102 +47,150 @@ _________________________________________________________________
 # 1. Calculate global effect sizes and plot
 1A. Fit a nested random effects model. Model syntax is res <- rma.mv(yi, vi, random=list(~1 | paperID, ~1 | obsID), data=dat1, subset=measCat==MEASCAT[i], slab=paste(paperID,obsID, sep=","))
 ```{r calcGlob, echo=TRUE, warning=FALSE, message=FALSE}
+
+#subset unique effect size data
 dat1<-dat[!is.na(dat$yi),]
 dat.meas<-ddply(dat1, ~obsID+measCat, summarize,
                 yi = unique(yi),
                 vi = unique(vi),
+                n1i<-unique(n1i),
+                n2i<-unique(n2i),
                 paperID = unique(paperID))
+
+colnames(dat.meas)<-c('obsID','measCat','yi','vi','n1i','n2i','paperID')
+
+#run random effects models to determine grand effect sizes and produce funnel plots
 res.list<-list()
+res.pubBias.list<-list()
 i<-0
+newfilename<-"funnelPlots.pdf"
+pdf(paste(figuresPath,'globalForest',newfilename, sep='/'), width = fig.width*3, height = fig.height*3)
+par(mfrow=c(3,3))
 for(i in 1:length(MEASCAT)){
+  
+  #subset by MEASCAT
+  df<-subset(dat.meas, measCat==MEASCAT[i])
+  #random effects model
   res <- rma.mv(yi, vi, 
-                random=list(~1 | paperID, ~1 | obsID), 
-                data=dat.meas, subset=measCat==MEASCAT[i], 
+                random= ~1 | paperID/obsID,
+                data=df, 
                 slab=as.character(obsID), 
-                method='ML')
+                method='REML')
   res.list[[i]]<-res
+  
+  #evaluate publication bias
+  ## funnel plot
+  funnel(res, main=labels[i])
+  
+  ## correlation between effect size and sample size
+  modtab<-summary(lm(yi~n1i, data=df))$coefficients
+  est<-round(modtab['n1i','Estimate'], digits=3)
+  pval<-round(modtab['n1i','Pr(>|t|)'], digits=3)
+  spearman.r<-round(cor(x=df$n1i, y=df$yi, method='spearman'), digits=3)
+  #file-drawer problem (aka fail-safe number)
+  res.fsn<-fsn(yi, vi, data=df)
+  fsnum.n<-res.fsn$fsnum
+  fsnum.pval<-round(res.fsn$pval, digits=3)
+  #save everything
+  res.pubBias.list[[i]]<-data.frame(MEASCAT[i], est, pval, spearman.r, fsnum.n, fsnum.pval)
+  
+  #print progress
   print(paste(i, 'of', length(MEASCAT)))
 }
+dev.off()
 names(res.list)<-MEASCAT
+names(res.pubBias.list)<-MEASCAT
+
+#random effects model results
 resultdf<-PrepForestPlot(res.list) #save estimates, pvalues, and prep dataframe for plotting
 resultdf
 newfilename<-'globalMeans.txt'
 write.table(resultdf, file=paste(figuresPath,'globalForest',newfilename, sep='/'), sep='\t')
-#intraPaperCorr #if this # is high, it means that the underlying true effects within paperIDs are estimated to correlate quite strongly
-#Heterogen #the sum of the two variance components can be interpreted as the total amount of heterogeneity in the true effects
 
-# #View profile likelihood plots
-# par(mfrow=c(2,1))
-# i<-0
-# for(i in 1:length(res.list)){
-#   res<-res.list[[i]]
-#   profile(res, sigma2=1)
-#   mtext(labels[i])
-#   profile(res, sigma2=2)
-#   mtext(labels[i])
-# }
-#if both have 1 peak, we can be sure that both variance components are identifiable
+#extract QE and QM information from res.list
+Qstats<-SaveQstats(res.list) #save Q stats
+Qstats
+newfilename<-'globalMeans_Qstats.txt'
+write.table(Qstats, file=paste(figuresPath,'globalForest',newfilename, sep='/'), sep='\t')
+
+#evaluate publication bias -- correlation table
+pubBias1.tab<-ldply(res.pubBias.list)
+pubBias1.tab
+newfilename<-'globalMeans_pubBias1.txt'
+write.table(pubBias1.tab, file=paste(figuresPath,'globalForest',newfilename, sep='/'), sep='\t')
+
+#show that yi's are normally distributed
+# Q-Q plots
+dat.measP<-dat.meas
+dat.measP$measCat<-factor(dat.measP$measCat, levels=MEASCAT)
+levels(dat.measP$measCat)<-labels
+qq<-ggplot(dat.measP, aes(sample=yi)) + 
+  facet_wrap(~measCat, scales='free', ncol=3) +
+  stat_qq() + mytheme + ggtitle('QQ Plots of effect sizes')
+qq
+
+newfilename<-"globalMeans_qqPlots.pdf"
+pdf(paste(figuresPath,'globalForest',newfilename, sep='/'), 
+    width = fig.width*3, height = fig.height*3)
+qq
+dev.off()
+
 ```
-1B. Fit just the Liao 2008 subset.
-```{r calcGlob_Liao, echo=TRUE, warning=FALSE, message=FALSE}
-dat.Liao<-subset(dat1, source2 == 'Liao 2008')
-dat.Liao.meas<-ddply(dat.Liao, ~obsID+measCat, summarize,
-                yi = unique(yi),
-                vi = unique(vi),
-                paperID = unique(paperID))
-res.Liao.list<-list()
-i<-0
-for(i in 1:length(MEASCAT)){
-  res <- rma.mv(yi, vi, 
-                random=list(~1 | paperID, ~1 | obsID), 
-                data=dat.Liao.meas, subset=measCat==MEASCAT[i], 
-                slab=as.character(obsID),
-                method='ML')
-  res.Liao.list[[i]]<-res
-  print(paste(i, 'of', length(MEASCAT)))
-}
-names(res.Liao.list)<-MEASCAT
-resultdf.Liao<-PrepForestPlot(res.Liao.list) #save estimates and prep dataframe for plotting
-resultdf.Liao
-newfilename<-'globalMeans_Liao.txt'
-write.table(resultdf.Liao, file=paste(figuresPath,'globalForest',newfilename, sep='/'), sep='\t')
-```
-1C. Make global forest plot comparing Liao 2008 and the full dataset
-```{r plotGlob, echo=TRUE, warning=FALSE, message=FALSE}
+1B. Plot the results of this study relative to previous meta-analyses
+```{r calcGlob_Liao, echo=TRUE, warning=FALSE, message=FALSE, include=FALSE}
+
+#get rid of NAs
+metaSum<-metaSummary[!is.na(metaSummary$est),]
+
+#column that indicates whether the CI overlaps 0
+overlap0<-metaSum$cil<0 &  metaSum$ciu>0
+metaSum$NoOverlap0<-!overlap0
+
+#fix levels
+metaSum$measCat<-factor(metaSum$measCat, levels=MEASCAT)
+old.study<-c('thisStudy','liao','vila','castroDiez')
+STUDY<-c('This Study','Liao 2008','Vila 2011','Castro-Diez 2014')
+library(plyr)
+metaSum$study<-mapvalues(metaSum$study, from = old.study, to = STUDY)
+metaSum$study<-factor(metaSum$study, levels=STUDY)
+colnames(metaSum)[1]<-'MEASCAT'
+metaSum<-merge(metaSum,measTab)
+
 #update effect size table for plotting with ggplot
-resultdf$y<-NA
-resultdf.Liao$y<-NA
-CATl<-rev(levels(resultdf$measCAT))
+metaSum$y<-NA
+CATl<-rev(levels(metaSum$MEASCAT))
 i<-0
 for(i in 1:length(CATl)){
-  resultdf[resultdf$measCAT==CATl[i],'y']<-i-0.15  
-  resultdf.Liao[resultdf.Liao$measCAT==CATl[i],'y']<-i+0.15
+  metaSum[metaSum$MEASCAT==CATl[i] & metaSum$study==STUDY[4],'y']<-i-0.3 
+  metaSum[metaSum$MEASCAT==CATl[i] & metaSum$study==STUDY[3],'y']<-i-0.1
+  metaSum[metaSum$MEASCAT==CATl[i] & metaSum$study==STUDY[2],'y']<-i+0.1
+  metaSum[metaSum$MEASCAT==CATl[i] & metaSum$study==STUDY[1],'y']<-i+0.3 
 }
-resultdf$source2<-'Full dataset'
-resultdf.Liao$source2<-'Liao 2008'
-resultdf.full<-rbind(resultdf, resultdf.Liao)
-cols <- c("Liao 2008" = "gray","Full dataset" = "black")
+cols <- c("blue","darkgray","darkgray","darkgray")
+shapes <- c(16,16,1,0)
 
 #make ggplot plot
-glob.sp<-ggplot(data=resultdf.full,aes(x=est,y=y, label=k, color=source2)) + 
-  geom_point(size=3) +
-  geom_errorbarh(aes(xmin=cil,xmax=ciu), height=0, show_guide=FALSE) +
+glob.sp<-ggplot(data=metaSum, aes(x=est, y=y, label=k, color=study, shape=study)) + mytheme + 
+  geom_point(size=2) +
+  geom_errorbarh(aes(xmin=cil,xmax=ciu), height=0) +
   geom_vline(xintercept=0,linetype="dashed") + 
-  mytheme + xlab('Std. Mean Diff. (Inv-Ref)') + ylab('') +
+  xlab('Effect size (RR)') + 
+  ylab('') +
+  geom_text(aes(x=ciu, y=y, hjust=-0.5, vjust=0.5),size=2.2, show_guide = FALSE) +
+  theme(legend.title=element_text(size=8)) +
   scale_y_continuous(breaks=seq(1,length(MEASCAT)),labels=rev(labels), 
-                     limits=c(0.5,9.5), expand=c(0,0)) + 
-  geom_text(aes(x=ciu, y=y, hjust=-0.5, vjust=0.5),size=2.2,show_guide = FALSE) + 
-  xlim(-0.6,1.5) +
-  geom_text(aes(label=ifelse(alpha05==TRUE,"*", ""), hjust=-0.6, vjust=0.4), 
-            size=5, show_guide=FALSE) +
-  scale_color_manual(name='Source',values=cols, breaks=c('Liao 2008','Full dataset'))
+                     limits=c(0.5,9.5), expand=c(0,0)) +
+  xlim(-2,2) +
+  scale_color_manual(name='Source',values=cols) +
+  scale_shape_manual(name='Source',values=shapes)
 glob.sp
 
 #save global forest plot
-newfilename<-"globalForest.png"
-png(paste(figuresPath,'globalForest',newfilename, sep='/'), units='in', width = fig.width*2, height = fig.height*3, res=fig.res)
+newfilename<-"globalForest_meta.pdf"
+pdf(paste(figuresPath,'globalForest',newfilename, sep='/'), width = fig.width*1.8, height = fig.height*2.5)
 glob.sp
 dev.off()
+
 ```
 
 _________________________________________________________________
@@ -180,31 +229,31 @@ for(i in 1:length(MEASCAT)){
   
   #reduced model
   res[[i]]<- rma.mv(yi, vi, 
-                    random=list(~1 | paperID, ~1 | obsID), 
+                    random= ~1 | paperID/obsID,
                     data=subdat, slab=as.character(obsID),
-                    method='ML')
+                    method='REML')
   
   #full models
   res.quality[[i]]<- rma.mv(yi, vi, 
                             mods= ~factor(measQuality), 
-                            random=list(~1 | paperID, ~1 | obsID), 
+                            random= ~1 | paperID/obsID, 
                             data=subdat, slab=as.character(obsID),
-                            method='ML')
+                            method='REML')
   res.ecosyst[[i]]<- rma.mv(yi, vi, 
                             mods= ~factor(ecosystCat), 
-                            random=list(~1 | paperID, ~1 | obsID), 
+                            random= ~1 | paperID/obsID, 
                             data=subdat, slab=as.character(obsID),
-                            method='ML')
+                            method='REML')
   res.studytype[[i]]<- rma.mv(yi, vi, 
                               mods= ~factor(studyType), 
-                              random=list(~1 | paperID, ~1 | obsID), 
+                              random= ~1 | paperID/obsID, 
                               data=subdat, slab=as.character(obsID),
-                              method='ML')
+                              method='REML')
   res.Nfix[[i]]<- rma.mv(yi, vi, 
                            mods= ~factor(Nfix), 
-                           random=list(~1 | paperID, ~1 | obsID), 
+                           random= ~1 | paperID/obsID, 
                            data=subdat, slab=as.character(obsID),
-                         method='ML')
+                         method='REML')
   print(paste(i, 'of', length(MEASCAT)))
 }
 names(res)<-MEASCAT
@@ -213,36 +262,69 @@ names(res.ecosyst)<-MEASCAT
 names(res.studytype)<-MEASCAT
 names(res.Nfix)<-MEASCAT
 
+
+
 #Test whether inclusion of any of these moderators are warrented
 ANOVAParams<-function(fullMod, reducedMod){
-  anova.comp<-anova(fullMod,reducedMod)
-  anova.comp.df<-data.frame(p.f=anova.comp$p.f,
-                            LRT=round(anova.comp$LRT, digits=3),
-                            pval=round(anova.comp$pval, digits=3))
+  
+  #do anova comparison
+  #anova.comp<-anova(fullMod,reducedMod)
+  QM<-fullMod$QM
+  QMp<-fullMod$QMp
+  
+  #manually calculate the pseudo R2 values
+  #compute the proportional reduction in the variance components as a sort of pseudo R-squared value
+  pseudoR2.1<-(reducedMod$sigma2[1] - fullMod$sigma2[1]) / reducedMod$sigma2[1]
+  pseudoR2.2<-(reducedMod$sigma2[2] - fullMod$sigma2[2]) / reducedMod$sigma2[2]
+  pseudoR2.perc<-(sum(reducedMod$sigma2) - sum(fullMod$sigma2)) / sum(reducedMod$sigma2)
+  anova.comp.df<-data.frame(QM=round(QM, digits=3),
+                            QMp=round(QMp, digits=3),
+                            pseudoR2.1=round(pseudoR2.1, digits=3), #pseudo R2 for the 1st sigma2
+                            pseudoR2.2=round(pseudoR2.2, digits=3), #pseudo R2 for the 2nd sigma2
+                            pseudoR2.perc=round(pseudoR2.perc, digits=3)
+                            )
+#   #put everything in a table
+#   anova.comp.df<-data.frame(p.f=anova.comp$p.f, #number of parameters in the full model
+#                             LRT=round(anova.comp$LRT, digits=3), #likelihood ratio statistic
+#                             pval=round(anova.comp$pval, digits=3), #p-value for the likelihood ratio test
+#                             pseudoR2.1=round(pseudoR2.1, digits=3), #pseudo R2 for the 1st sigma2
+#                             pseudoR2.2=round(pseudoR2.2, digits=3), #pseudo R2 for the 2nd sigma2
+#                             pseudoR2.perc=round(pseudoR2.perc, digits=3) #the proportional reduction in the total variance
+                            #) 
   return(anova.comp.df)
 }
 i<-0
 tmp.list<-list()
 for(i in 1:length(MEASCAT)){
-  p.r<-anova(res.quality[[i]], res[[i]])$p.r #reduced model parameters
-  qualityA<-ANOVAParams(fullMod=res.quality[[i]], reducedMod=res[[i]]) #full vs reduced model anova and extract params
+  
+#   #reduced model parameters
+#   p.r<-anova(res.quality[[i]], res[[i]])$p.r 
+  
+  #full vs reduced model anova and extract params
+  qualityA<-ANOVAParams(fullMod=res.quality[[i]], reducedMod=res[[i]]) 
   ecosystA<-ANOVAParams(fullMod=res.ecosyst[[i]], reducedMod=res[[i]])
   studytypeA<-ANOVAParams(fullMod=res.studytype[[i]], reducedMod=res[[i]])
   NfixA<-ANOVAParams(fullMod=res.Nfix[[i]], reducedMod=res[[i]])
   tmpdf<-rbind(qualityA, ecosystA, studytypeA, NfixA) #same anova params in a dataframe
   anovaLabels<-c('qualityA','ecosystA','studytypeA','NfixA') #name all the rows
-  p.rCol<-rep(p.r, dim(tmpdf)[1]) #add a column to hold the reduced model information
-  tmp.list[[i]]<-data.frame(anovaLabels, p.rCol, tmpdf)
+  
+#   #add a column to hold the reduced model information
+#   p.rCol<-rep(p.r, dim(tmpdf)[1])
+  
+  #save df
+  tmp.list[[i]]<-data.frame(anovaLabels, tmpdf)
+  
 }
 names(tmp.list)<-MEASCAT
 anovaMods<-ldply(tmp.list)
 anovaMods
 newfilename<-'anovaMods.txt'
 write.table(anovaMods, file=paste(figuresPath,'modForests',newfilename, sep='/'), sep='\t')
+
 ```
 2Bi. Study type
 ```{r studytype, echo=TRUE, warning=FALSE, message=FALSE}
-currMeasFac<-anovaMods[anovaMods$anovaLabels=='studytypeA' & anovaMods$pval < 0.05,'.id']
+currMeasFac<-anovaMods[anovaMods$anovaLabels=='studytypeA' & anovaMods$QMp < 0.05,'.id']
 currMeasFac
 
 #Run post-hoc comparisions among Study type levels, pull out means and CI
@@ -303,14 +385,14 @@ predR
 #assign post-hoc letters (order:field study, expt addition, expt removl, gh)
 #subset(posthocR, .id=='biom')
 phTno<-c('a','b','b','b') 
-phTsom<-c('','','','')
+phTsom<-c('a','ab','ab','b')
 predR$posthocL<-c(phTno,phTsom)
 
 #assign pretty names and symbols
 faclimits<-rev(c('Greenhouse study',
-             'Removal expt',
-             'Addition expt',
-             'Observational study'))
+             'Field removal',
+             'Field addition',
+             'Field observation'))
 facShapes<-c(16,17,15,18)
 predR$annLabel<-paste(predR$posthocL, ' (',predR$k,')', sep='')
 
@@ -318,27 +400,30 @@ predR$annLabel<-paste(predR$posthocL, ' (',predR$k,')', sep='')
 predR1<-predR #get rid of the CIs for a level with only 1 data point
 predR1[predR1$MeasFac == 'som' & predR1$CAT == 'field expt addition',c('cilb','ciub')]<-NA
 stud.sp<-ggplot(data=predR1,aes(x=pred,y=y, shape=CAT, label=annLabel)) + 
-  geom_point(aes(shape=CAT),size=3) +
+  geom_point(aes(shape=CAT),size=2) +
   geom_errorbarh(aes(xmin=cilb,xmax=ciub), height=0)+
   geom_vline(xintercept=0,linetype="dashed") + mytheme +
   xlab('Std. Mean Diff. (Inv-Ref)') + ylab('') +
   scale_y_continuous(breaks=c(1,2),labels=MeasNamesl) +
-  scale_shape_manual(name="Factor",
+  scale_shape_manual(name="Study design",
                      labels=faclimits,
                      values=facShapes)+
   geom_text(aes(x=ciub, y=y, hjust=-0.3, vjust=0.5),size=2.2,show_guide = FALSE) +
   annotate("text", x=1, y=1.1, label=' (1)', size=2.2)+ #manually add the posthoc letters and k here
-  scale_x_continuous(expand=c(0,0), limits=c(-1.5,5.3)) 
-stud.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10)) 
+  scale_x_continuous(expand=c(0,0), limits=c(-1.5,5.3)) +
+  theme(legend.title=element_text(size=8))
+stud.sp 
+#theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10)) 
 
-newfilename<-"studytypeForest.png"
-png(paste(figuresPath,'modForests',newfilename, sep='/'), units='in', width = fig.width*2, height = fig.height*1.5, res=fig.res)
-stud.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10)) 
+newfilename<-"studytypeForest.pdf"
+pdf(paste(figuresPath,'modForests',newfilename, sep='/'), width = fig.width*1.8, height = fig.height*1)
+stud.sp 
 dev.off()
+
 ```
 2Bii. Nfix status
 ```{r nfix, echo=TRUE, warning=FALSE, message=FALSE}
-currMeasFac<-anovaMods[anovaMods$anovaLabels=='NfixA' & anovaMods$pval < 0.05,'.id']
+currMeasFac<-anovaMods[anovaMods$anovaLabels=='NfixA' & anovaMods$QMp < 0.05,'.id']
 currMeasFac
 
 #levels(dat.tmp$Nfix) #check to make sure that this lines up with the way I organized the contrasts
@@ -398,8 +483,8 @@ predR
 
 #assign post-hoc letters (order:field study, expt addition, expt removl, gh)
 #subset(posthocR, .id=='litterbiom')
-phTtoti<-c('b','a','b','b') 
-phTsoiln<-c('a','a','b','a') #check this one
+phTtoti<-c('b','a','b','ab') 
+phTsoiln<-c('a','ab','b','ab')
 phTsoilcn<-c('a','b','a','a') 
 predR$posthocL<-c(phTtoti,phTsoiln, phTsoilcn)
 
@@ -409,6 +494,9 @@ facShapes<-c(16,17,15,18)
 predR$annLabel<-paste(predR$posthocL, ' (',predR$k,')', sep='')
 
 #ggplot
+faclimits_new<-c('No N-fixers','Ref. community N-fixers only','Invasive sp. N-fixers only','Ref. and inv. sp. N-fixers')
+
+
 nfix.sp<-ggplot(data=predR,aes(x=pred,y=y, shape=CAT,label=annLabel)) + 
   geom_point(aes(shape=CAT),size=3) +
   geom_errorbarh(aes(xmin=cilb,xmax=ciub), height=0)+
@@ -416,17 +504,20 @@ nfix.sp<-ggplot(data=predR,aes(x=pred,y=y, shape=CAT,label=annLabel)) +
   xlab('Std. Mean Diff. (Inv-Ref)') + ylab('') +
   scale_y_continuous(breaks=seq(1,length(MeasFacl)),
                      labels=MeasNamesl) +
-  scale_shape_manual(name="Factor",
-                     labels=faclimits,
+  scale_shape_manual(name="N-fixing status",
+                     labels=faclimits_new,
                      values=facShapes)+
   geom_text(aes(x=ciub, y=y, hjust=-0.3, vjust=0.5),size=2.2,show_guide = FALSE) +
-  scale_x_continuous(expand=c(0,0), limits=c(-1.3,2.3))
-nfix.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
-
-newfilename<-"nfixForest.png"
-png(paste(figuresPath,'modForests',newfilename, sep='/'), units='in', width = fig.width*2, height = fig.height*2, res=fig.res)
-nfix.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
+  scale_x_continuous(expand=c(0,0), limits=c(-1.3,2.3))+
+  theme(legend.title=element_text(size=8))
+nfix.sp
+#theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
+  
+newfilename<-"nfixForest.pdf"
+pdf(paste(figuresPath,'modForests',newfilename, sep='/'), width = fig.width*2, height = fig.height*1.5)
+nfix.sp
 dev.off()
+
 ```
 2Biii. Quality
 ```{r quality, echo=TRUE, warning=FALSE, message=FALSE}
@@ -435,202 +526,204 @@ currMeasFac
 #note - som doesn't have all levels of measQuality, so you need to have a different set of contrasts
 #levels(dat.tmp$measQuality) #check to make sure that this lines up with the way I organized the contrasts
 #Run post-hoc comparisions among Nfix levels, pull out means and CI
-i<-0
-posthoc.list<-list()
-pred.list<-list()
-for(i in 1:length(currMeasFac)){
-  #1. calc posthoc pvals
-  if(i %in% c(1,2)){
-    posthocR<-anova(res.quality[[currMeasFac[i]]],
-                    # A+C+, A+C-, A-C+, A-C-
-                    L=rbind(c(1,-1,0,0), #A+C+ vs A+C-
-                            c(1,0,-1,0), #A+C+ vs A-C+
-                            c(1,0,0,-1), #A+C+ vs A-C-
-                            c(0,1,-1,0), #A+C- vs A-C+
-                            c(0,1,0,-1), #A+C- vs A-C-
-                            c(0,0,1,-1)  #A-C+ vs A-C-
-                    ))
-    levelcomp<-c('both_a','both_c','both_none','a_c','a_none','c_none')
-    posthoc.list[[i]]<-data.frame(levelcomp, pval=round(posthocR$pval, digits=4))
-  }else{
-    temp1<-subset(dat.tmp, measCat=='som')
-    unique(temp1$measQuality)
-    #levels: A+C-, A-C+, A-C-
-    posthocR<-anova(res.quality[[currMeasFac[i]]], 
-                    L=rbind(c(1,-1,0), #A+C- vs A-C+
-                            c(1,0,-1), #A+C- vs A-C-
-                            c(0,1,-1)  #A-C+ vs A-C-
-                    ))
-    levelcomp<-c('a_c','a_none','c_none')
-    posthoc.list[[i]]<-data.frame(levelcomp, pval=round(posthocR$pval, digits=4))
-  }
-  
-  #2. calc predicted values by level
-  predR<-predict(res.quality[[currMeasFac[i]]])
-  tmp<-data.frame(obsID=predR$slab, pred=predR$pred, cilb=predR$ci.lb, ciub=predR$ci.ub, se=predR$se)
-  ind.Fac<-ddply(dat.tmp, ~obsID+measCat, summarize, Level=measQuality)
-  ind.Fac.sub<-subset(ind.Fac, measCat==currMeasFac[i])
-  tmp1<-merge(tmp, ind.Fac.sub)
-  tmp2<-ddply(tmp1, ~Level, summarize,
-        pred = unique(pred),
-        cilb = unique(cilb),
-        ciub = unique(ciub),
-        se = unique(se),
-        k = length(obsID))
-  pred.list[[i]]<-tmp2
-  
-  }
-names(posthoc.list)<-currMeasFac
-posthocR<-ldply(posthoc.list)
-posthocR
+# i<-0
+# posthoc.list<-list()
+# pred.list<-list()
+# for(i in 1:length(currMeasFac)){
+#   #1. calc posthoc pvals
+#   if(i %in% c(1,2)){
+#     posthocR<-anova(res.quality[[currMeasFac[i]]],
+#                     # A+C+, A+C-, A-C+, A-C-
+#                     L=rbind(c(1,-1,0,0), #A+C+ vs A+C-
+#                             c(1,0,-1,0), #A+C+ vs A-C+
+#                             c(1,0,0,-1), #A+C+ vs A-C-
+#                             c(0,1,-1,0), #A+C- vs A-C+
+#                             c(0,1,0,-1), #A+C- vs A-C-
+#                             c(0,0,1,-1)  #A-C+ vs A-C-
+#                     ))
+#     levelcomp<-c('both_a','both_c','both_none','a_c','a_none','c_none')
+#     posthoc.list[[i]]<-data.frame(levelcomp, pval=round(posthocR$pval, digits=4))
+#   }else{
+#     temp1<-subset(dat.tmp, measCat=='som')
+#     unique(temp1$measQuality)
+#     #levels: A+C-, A-C+, A-C-
+#     posthocR<-anova(res.quality[[currMeasFac[i]]], 
+#                     L=rbind(c(1,-1,0), #A+C- vs A-C+
+#                             c(1,0,-1), #A+C- vs A-C-
+#                             c(0,1,-1)  #A-C+ vs A-C-
+#                     ))
+#     levelcomp<-c('a_c','a_none','c_none')
+#     posthoc.list[[i]]<-data.frame(levelcomp, pval=round(posthocR$pval, digits=4))
+#   }
+#   
+#   #2. calc predicted values by level
+#   predR<-predict(res.quality[[currMeasFac[i]]])
+#   tmp<-data.frame(obsID=predR$slab, pred=predR$pred, cilb=predR$ci.lb, ciub=predR$ci.ub, se=predR$se)
+#   ind.Fac<-ddply(dat.tmp, ~obsID+measCat, summarize, Level=measQuality)
+#   ind.Fac.sub<-subset(ind.Fac, measCat==currMeasFac[i])
+#   tmp1<-merge(tmp, ind.Fac.sub)
+#   tmp2<-ddply(tmp1, ~Level, summarize,
+#         pred = unique(pred),
+#         cilb = unique(cilb),
+#         ciub = unique(ciub),
+#         se = unique(se),
+#         k = length(obsID))
+#   pred.list[[i]]<-tmp2
+#   
+#   }
+# names(posthoc.list)<-currMeasFac
+# posthocR<-ldply(posthoc.list)
+# posthocR
+# 
+# names(pred.list)<-currMeasFac
+# predR<-ldply(pred.list)
+# predR
+# 
+# #update effect size table for plotting
+# colnames(predR)[1]<-'MeasFac'
+# selectMeas<-unique(predR$MeasFac)
+# MeasFacl<-rev(levels(factor(MEASCAT[MEASCAT %in% selectMeas], levels=MEASCAT[MEASCAT %in% selectMeas])))
+# MeasNamesl<-rev(measTab[measTab$MEASCAT %in% selectMeas,'labels'])
+# colnames(predR)[2]<-'CAT'
+# CAT<-levels(dat$measQuality)
+# predR$y<-NA
+# i<-0
+# for(i in 1:length(MeasFacl)){
+#   predR[predR$CAT==CAT[1] & predR$MeasFac==MeasFacl[i],'y']<-i+0.3
+#   predR[predR$CAT==CAT[2] & predR$MeasFac==MeasFacl[i],'y']<-i+0.1
+#   predR[predR$CAT==CAT[3] & predR$MeasFac==MeasFacl[i],'y']<-i-0.1
+#   predR[predR$CAT==CAT[4] & predR$MeasFac==MeasFacl[i],'y']<-i-0.3
+# }
+# predR
+# 
+# #assign post-hoc letters (order ex:both, a, c, none)
+# #subset(posthocR, .id=='som')
+# phTnitrif<-c('','','','') #both vs c is marginally signif (p=0.059) 
+# phTnminz<-c('ab','ab','b','a') #both vs c is marginally signif (p=0.080), c vs none is signif (p=0.038)
+# phTsom<-c('ab','a','b') #c vs none pval=0.0128 
+# predR$posthocL<-c(phTnitrif,phTnminz, phTsom)
+# 
+# #assign pretty names and symbols
+# faclimits<-rev(c('No Manipulation','Units Converted',
+#                  'Values Aggregated','Units Converted &\nValues Aggregated'))
+# facShapes<-c(16,17,15,18)
+# predR$annLabel<-paste(predR$posthocL, ' (',predR$k,')', sep='')
+# 
+# #ggplot
+# qual.sp<-ggplot(data=predR,aes(x=pred,y=y, shape=CAT,label=annLabel)) + 
+#   geom_point(aes(shape=CAT),size=3) +
+#   geom_errorbarh(aes(xmin=cilb,xmax=ciub), height=0)+
+#   geom_vline(xintercept=0,linetype="dashed") + mytheme +
+#   xlab('Std. Mean Diff. (Inv-Ref)') + ylab('') +
+#   scale_shape_manual(name="Factor",
+#                      labels=faclimits,
+#                      values=facShapes) +
+#   scale_y_continuous(breaks=seq(1,length(MeasFacl)),
+#                      labels=MeasNamesl) +
+#   geom_text(aes(x=ciub, y=y, hjust=-0.3, vjust=0.5),size=2.2,show_guide = FALSE) +
+#   scale_x_continuous(expand=c(0,0),limits=c(-3,2.3))
+# qual.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
+# 
+# newfilename<-"qualityForest.png"
+# png(paste(figuresPath,'modForests',newfilename, sep='/'), units='in', width = fig.width*2, height = fig.height*2, res=fig.res)
+# qual.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
+# dev.off()
 
-names(pred.list)<-currMeasFac
-predR<-ldply(pred.list)
-predR
-
-#update effect size table for plotting
-colnames(predR)[1]<-'MeasFac'
-selectMeas<-unique(predR$MeasFac)
-MeasFacl<-rev(levels(factor(MEASCAT[MEASCAT %in% selectMeas], levels=MEASCAT[MEASCAT %in% selectMeas])))
-MeasNamesl<-rev(measTab[measTab$MEASCAT %in% selectMeas,'labels'])
-colnames(predR)[2]<-'CAT'
-CAT<-levels(dat$measQuality)
-predR$y<-NA
-i<-0
-for(i in 1:length(MeasFacl)){
-  predR[predR$CAT==CAT[1] & predR$MeasFac==MeasFacl[i],'y']<-i+0.3
-  predR[predR$CAT==CAT[2] & predR$MeasFac==MeasFacl[i],'y']<-i+0.1
-  predR[predR$CAT==CAT[3] & predR$MeasFac==MeasFacl[i],'y']<-i-0.1
-  predR[predR$CAT==CAT[4] & predR$MeasFac==MeasFacl[i],'y']<-i-0.3
-}
-predR
-
-#assign post-hoc letters (order ex:both, a, c, none)
-#subset(posthocR, .id=='som')
-phTnitrif<-c('','','','') #both vs c is marginally signif (p=0.059) 
-phTnminz<-c('ab','ab','b','a') #both vs c is marginally signif (p=0.080), c vs none is signif (p=0.038)
-phTsom<-c('ab','a','b') #c vs none pval=0.0128 
-predR$posthocL<-c(phTnitrif,phTnminz, phTsom)
-
-#assign pretty names and symbols
-faclimits<-rev(c('No Manipulation','Units Converted',
-                 'Values Aggregated','Units Converted &\nValues Aggregated'))
-facShapes<-c(16,17,15,18)
-predR$annLabel<-paste(predR$posthocL, ' (',predR$k,')', sep='')
-
-#ggplot
-qual.sp<-ggplot(data=predR,aes(x=pred,y=y, shape=CAT,label=annLabel)) + 
-  geom_point(aes(shape=CAT),size=3) +
-  geom_errorbarh(aes(xmin=cilb,xmax=ciub), height=0)+
-  geom_vline(xintercept=0,linetype="dashed") + mytheme +
-  xlab('Std. Mean Diff. (Inv-Ref)') + ylab('') +
-  scale_shape_manual(name="Factor",
-                     labels=faclimits,
-                     values=facShapes) +
-  scale_y_continuous(breaks=seq(1,length(MeasFacl)),
-                     labels=MeasNamesl) +
-  geom_text(aes(x=ciub, y=y, hjust=-0.3, vjust=0.5),size=2.2,show_guide = FALSE) +
-  scale_x_continuous(expand=c(0,0),limits=c(-3,2.3))
-qual.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
-
-newfilename<-"qualityForest.png"
-png(paste(figuresPath,'modForests',newfilename, sep='/'), units='in', width = fig.width*2, height = fig.height*2, res=fig.res)
-qual.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
-dev.off()
 ```
 2Biv. Ecosystem type
 ```{r ecosyst, echo=TRUE, warning=FALSE, message=FALSE}
 currMeasFac<-anovaMods[anovaMods$anovaLabels=='ecosystA' & anovaMods$pval < 0.05,'.id']
 currMeasFac
 
-#levels(dat.tmp$ecosystCat) #check to make sure that this lines up with the way I organized the contrasts
-#Run post-hoc comparisions among Nfix levels, pull out means and CI
-i<-0
-posthoc.list<-list()
-pred.list<-list()
-for(i in 1:length(currMeasFac)){
-  #1. calc posthoc pvals
-  # forest, shrubland, grassland, wetland
-  posthocR<-anova(res.ecosyst[[currMeasFac[i]]], 
-      L=rbind(c(1,-1,0,0), #forest vs shrub
-              c(1,0,-1,0), #forest vs grass
-              c(1,0,0,-1), #forest vs wet
-              c(0,1,-1,0), #shrub vs grass
-              c(0,1,0,-1), #shrub vs wet
-              c(0,0,1,-1) #grass vs wet
-              ))
-  levelcomp<-c('f_s','f_g','f_w',
-                     's_g','s_w',
-                           'g_w')
-  posthoc.list[[i]]<-data.frame(levelcomp, pval=round(posthocR$pval, digits=4))
-  #2. calc predicted values by level
-  predR<-predict(res.ecosyst[[currMeasFac[i]]])
-  tmp<-data.frame(obsID=predR$slab, pred=predR$pred, cilb=predR$ci.lb, ciub=predR$ci.ub, se=predR$se)
-  ind.Fac<-ddply(dat.tmp, ~obsID, summarize, Level=unique(ecosystCat))
-  tmp1<-merge(tmp, ind.Fac)
-  tmp2<-ddply(tmp1, ~Level, summarize,
-        pred = unique(pred),
-        cilb = unique(cilb),
-        ciub = unique(ciub),
-        se = unique(se),
-        k = length(obsID))
-  pred.list[[i]]<-tmp2
-  }
-names(posthoc.list)<-currMeasFac
-posthocR<-ldply(posthoc.list)
-posthocR
+# #levels(dat.tmp$ecosystCat) #check to make sure that this lines up with the way I organized the contrasts
+# #Run post-hoc comparisions among Nfix levels, pull out means and CI
+# i<-0
+# posthoc.list<-list()
+# pred.list<-list()
+# for(i in 1:length(currMeasFac)){
+#   #1. calc posthoc pvals
+#   # forest, shrubland, grassland, wetland
+#   posthocR<-anova(res.ecosyst[[currMeasFac[i]]], 
+#       L=rbind(c(1,-1,0,0), #forest vs shrub
+#               c(1,0,-1,0), #forest vs grass
+#               c(1,0,0,-1), #forest vs wet
+#               c(0,1,-1,0), #shrub vs grass
+#               c(0,1,0,-1), #shrub vs wet
+#               c(0,0,1,-1) #grass vs wet
+#               ))
+#   levelcomp<-c('f_s','f_g','f_w',
+#                      's_g','s_w',
+#                            'g_w')
+#   posthoc.list[[i]]<-data.frame(levelcomp, pval=round(posthocR$pval, digits=4))
+#   #2. calc predicted values by level
+#   predR<-predict(res.ecosyst[[currMeasFac[i]]])
+#   tmp<-data.frame(obsID=predR$slab, pred=predR$pred, cilb=predR$ci.lb, ciub=predR$ci.ub, se=predR$se)
+#   ind.Fac<-ddply(dat.tmp, ~obsID, summarize, Level=unique(ecosystCat))
+#   tmp1<-merge(tmp, ind.Fac)
+#   tmp2<-ddply(tmp1, ~Level, summarize,
+#         pred = unique(pred),
+#         cilb = unique(cilb),
+#         ciub = unique(ciub),
+#         se = unique(se),
+#         k = length(obsID))
+#   pred.list[[i]]<-tmp2
+#   }
+# names(posthoc.list)<-currMeasFac
+# posthocR<-ldply(posthoc.list)
+# posthocR
+# 
+# names(pred.list)<-currMeasFac
+# predR<-ldply(pred.list)
+# predR
+# 
+# #update effect size table for plotting
+# colnames(predR)[1]<-'MeasFac'
+# selectMeas<-unique(predR$MeasFac)
+# MeasFacl<-rev(levels(factor(MEASCAT[MEASCAT %in% selectMeas], levels=MEASCAT[MEASCAT %in% selectMeas])))
+# MeasNamesl<-rev(measTab[measTab$MEASCAT %in% selectMeas,'labels'])
+# colnames(predR)[2]<-'CAT'
+# CAT<-levels(dat.tmp$ecosystCat)
+# predR$y<-NA
+# i<-0
+# for(i in 1:length(MeasFacl)){
+#   predR[predR$CAT==CAT[1] & predR$MeasFac==MeasFacl[i],'y']<-i+0.3
+#   predR[predR$CAT==CAT[2] & predR$MeasFac==MeasFacl[i],'y']<-i+0.1
+#   predR[predR$CAT==CAT[3] & predR$MeasFac==MeasFacl[i],'y']<-i-0.1
+#   predR[predR$CAT==CAT[4] & predR$MeasFac==MeasFacl[i],'y']<-i-0.3
+# }
+# predR
+# 
+# #assign post-hoc letters (order:f, s, g, w)
+# #subset(posthocR, .id=='soiln')
+# phTammonif<-c('a','b','b','b') 
+# phTsoiln<-c('b','bc','a','ac') #check this one
+# predR$posthocL<-c(phTammonif,phTsoiln)
+# 
+# #assign pretty names and symbols
+# faclimits<-rev(c('Wetland','Grassland','Shrubland','Forest'))
+# facShapes<-c(16,17,15,18)
+# predR$annLabel<-paste(predR$posthocL, ' (',predR$k,')', sep='')
+# 
+# #ggplot
+# eco.sp<-ggplot(data=predR,aes(x=pred,y=y, shape=CAT,label=annLabel)) + 
+#   geom_point(aes(shape=CAT),size=3) +
+#   geom_errorbarh(aes(xmin=cilb,xmax=ciub), height=0)+
+#   geom_vline(xintercept=0,linetype="dashed") + mytheme +
+#   xlab('Std. Mean Diff. (Inv-Ref)') + ylab('') +
+#   scale_y_continuous(breaks=seq(1,length(MeasFacl)),
+#                      labels=MeasNamesl) +
+#   scale_shape_manual(name="Factor",
+#                      labels=faclimits,
+#                      values=facShapes)+
+#   geom_text(aes(x=ciub, y=y, hjust=-0.3, vjust=0.5),size=2.2,show_guide = FALSE) +
+#   scale_x_continuous(expand=c(0,0), limits=c(-1.1,2))
+# eco.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
+# 
+# newfilename<-"ecosystForest.png"
+# png(paste(figuresPath,'modForests',newfilename, sep='/'), units='in', width = fig.width*1.5, height = fig.height*1.5, res=fig.res)
+# eco.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
+# dev.off()
 
-names(pred.list)<-currMeasFac
-predR<-ldply(pred.list)
-predR
-
-#update effect size table for plotting
-colnames(predR)[1]<-'MeasFac'
-selectMeas<-unique(predR$MeasFac)
-MeasFacl<-rev(levels(factor(MEASCAT[MEASCAT %in% selectMeas], levels=MEASCAT[MEASCAT %in% selectMeas])))
-MeasNamesl<-rev(measTab[measTab$MEASCAT %in% selectMeas,'labels'])
-colnames(predR)[2]<-'CAT'
-CAT<-levels(dat.tmp$ecosystCat)
-predR$y<-NA
-i<-0
-for(i in 1:length(MeasFacl)){
-  predR[predR$CAT==CAT[1] & predR$MeasFac==MeasFacl[i],'y']<-i+0.3
-  predR[predR$CAT==CAT[2] & predR$MeasFac==MeasFacl[i],'y']<-i+0.1
-  predR[predR$CAT==CAT[3] & predR$MeasFac==MeasFacl[i],'y']<-i-0.1
-  predR[predR$CAT==CAT[4] & predR$MeasFac==MeasFacl[i],'y']<-i-0.3
-}
-predR
-
-#assign post-hoc letters (order:f, s, g, w)
-#subset(posthocR, .id=='soiln')
-phTammonif<-c('a','b','b','b') 
-phTsoiln<-c('b','bc','a','ac') #check this one
-predR$posthocL<-c(phTammonif,phTsoiln)
-
-#assign pretty names and symbols
-faclimits<-rev(c('Wetland','Grassland','Shrubland','Forest'))
-facShapes<-c(16,17,15,18)
-predR$annLabel<-paste(predR$posthocL, ' (',predR$k,')', sep='')
-
-#ggplot
-eco.sp<-ggplot(data=predR,aes(x=pred,y=y, shape=CAT,label=annLabel)) + 
-  geom_point(aes(shape=CAT),size=3) +
-  geom_errorbarh(aes(xmin=cilb,xmax=ciub), height=0)+
-  geom_vline(xintercept=0,linetype="dashed") + mytheme +
-  xlab('Std. Mean Diff. (Inv-Ref)') + ylab('') +
-  scale_y_continuous(breaks=seq(1,length(MeasFacl)),
-                     labels=MeasNamesl) +
-  scale_shape_manual(name="Factor",
-                     labels=faclimits,
-                     values=facShapes)+
-  geom_text(aes(x=ciub, y=y, hjust=-0.3, vjust=0.5),size=2.2,show_guide = FALSE) +
-  scale_x_continuous(expand=c(0,0), limits=c(-1.1,2))
-eco.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
-
-newfilename<-"ecosystForest.png"
-png(paste(figuresPath,'modForests',newfilename, sep='/'), units='in', width = fig.width*1.5, height = fig.height*1.5, res=fig.res)
-eco.sp + theme(axis.text.y=element_text(angle=90, hjust=0.5, size=10))
-dev.off()
 ```
 
 _________________________________________________________________
@@ -647,9 +740,17 @@ where...
 'cn' is leaf C:N;
 'littercn' is litter C:N;
 ```{r fitreg, echo=TRUE, warning=FALSE, message=FALSE}
-INVlist<-FitPlot(dat, k=1)
-NATlist<-FitPlot(dat, k=2)
-DIFFlist<-FitPlot(dat, k=3)
+INVlist<-FitPlot(dat, k=1, qualColumn='InvSpInvArea_qualRank', colorN=5)
+NATlist<-FitPlot(dat, k=2, qualColumn='NatArea_qualRank', colorN=5)
+DIFFlist<-FitPlot(dat, k=3, qualColumn='CWMDiff_qualRank', colorN=10)
+DIFF2list<-FitPlot(dat, k=4, qualColumn='CWMDiff2_qualRank', colorN=10)
+
+#same thing, but instead color plots by invasive species' N-fixing status instead of trait quality
+source('CODE/metaAnalysis/fxn_FitPlot_Nfix.R')
+INVlist_Nfix<-FitPlot_Nfix(dat, k=1, nfixColumn='Nfix')
+DIFFlist_Nfix<-FitPlot_Nfix(dat, k=3, nfixColumn='Nfix')
+DIFF2list_Nfix<-FitPlot_Nfix(dat, k=4, nfixColumn='Nfix')
+
 
 INVtab<-rbind(ldply(INVlist[['results']][['percN']]),
               ldply(INVlist[['results']][['litterpercN']]),
@@ -663,6 +764,11 @@ DIFFtab<-rbind(ldply(DIFFlist[['results']][['percN']]),
               ldply(DIFFlist[['results']][['litterpercN']]),
               ldply(DIFFlist[['results']][['cn']]),
               ldply(DIFFlist[['results']][['littercn']]))[,-1]
+DIFF2tab<-rbind(ldply(DIFF2list[['results']][['percN']]),
+              ldply(DIFF2list[['results']][['litterpercN']]),
+              ldply(DIFF2list[['results']][['cn']]),
+              ldply(DIFF2list[['results']][['littercn']]))[,-1]
+
 
 newfilename<-'INVtab.txt'
 write.table(INVtab, file=paste(figuresPath,'allRegressionTable',newfilename, sep='/'), sep='\t', row.names=FALSE)
@@ -670,95 +776,70 @@ newfilename<-'NATtab.txt'
 write.table(NATtab, file=paste(figuresPath,'allRegressionTable',newfilename, sep='/'), sep='\t', row.names=FALSE)
 newfilename<-'DIFFtab.txt'
 write.table(DIFFtab, file=paste(figuresPath,'allRegressionTable',newfilename, sep='/'), sep='\t', row.names=FALSE)
+newfilename<-'DIFF2tab.txt'
+write.table(DIFF2tab, file=paste(figuresPath,'allRegressionTable',newfilename, sep='/'), sep='\t', row.names=FALSE)
+
 
 INVtab[INVtab$pVal <0.1 & INVtab$measType %in% MEASCAT,]
+INVlist[['qual']][['percN']][['soiln']] #trait quality has a marginal influence - studies with low quality trait data tend to have higher ESs
+INVlist[['qual']][['percN']][['soilcn']]
+INVlist[['qual']][['litterpercN']][['soilcn']]
+
 NATtab[NATtab$pVal <0.1 & NATtab$measType %in% MEASCAT,]
+NATlist[['qual']][['cn']][['nminz']]
+NATlist[['qual']][['cn']][['soilcn']]
+
 DIFFtab[DIFFtab$pVal <0.1 & DIFFtab$measType %in% MEASCAT,]
+DIFFlist[['qual']][['litterpercN']][['nh']]
+DIFFlist[['qual']][['litterpercN']][['toti']]
+DIFFlist[['qual']][['cn']][['toti']] #trait quality has a marginal influence - studies with low quality trait data tend to have higher ESs
+DIFFlist[['qual']][['cn']][['nminz']]
+DIFFlist[['qual']][['cn']][['soilcn']]
+DIFFlist[['qual']][['littercn']][['nh']]
+DIFFlist[['qual']][['littercn']][['toti']]
+DIFFlist[['qual']][['littercn']][['nminz']]
+
+DIFF2tab[DIFF2tab$pVal <0.1 & DIFF2tab$measType %in% MEASCAT,]
+DIFF2list[['qual']][['percN']][['nh']] #trait quality has a marginal influence - studies with low quality trait data tend to have higher ESs
+DIFF2list[['qual']][['litterpercN']][['soilcn']]
+DIFF2list[['qual']][['cn']][['nh']] # trait quality has a influence - studies with low quality trait data tend to have higher ESs
+DIFF2list[['qual']][['cn']][['nminz']]
+DIFF2list[['qual']][['cn']][['soilcn']]
+DIFF2list[['qual']][['littercn']][['nh']]
+DIFF2list[['qual']][['littercn']][['toti']]
+
+
 ```
 3B. Plot some/all of the regressions
-3Bi. CWM Diff Litter %N and Litter C:N VS nh, toti, nminz
-```{r plotreg, echo=TRUE, warning=FALSE, message=FALSE}
-#CWM Diff Litter %N and Litter C:N VS nh, toti, nminz
-
-#set up panel margins
-top<-0
-right<-0.05
-bottom<-0
-left<-0.05
-
-#set up labels
-ylabel <- textGrob(c('Ammonium','Total inorg. N','Mineralization',
-                  'Std. Mean Diff. (Inv-Ref)'), 
-                y=c(0.83,0.5,0.15,
-                    0.5),
-                x=unit(c(2,2,2,
-                         1),'lines'), rot=90)
-xlabel<- textGrob(c('Invaded - Reference area\nLitter %N', 'Invaded - Reference area\nLitter C:N'), 
-               x=c(0.25,0.75),
-               y=unit(c(1,1), 'lines'))
-
-#open image file connection
-newfilename<-"exampleRegression.png"
-png(paste(figuresPath,newfilename, sep='/'), units='in', width = fig.width*3, height = fig.height*4, res=fig.res)
-
-#plot
-grid.arrange(
-  
-  ylabel, # topleft
-  
-  arrangeGrob(
-    
-    DIFFlist[['figures']][['litterpercN']][['nh']] + ggtitle('a') + 
-      theme(plot.margin = unit(c(top,right,bottom,left),"in")),
-    DIFFlist[['figures']][['littercn']][['nh']] + ggtitle('d') +
-      theme(plot.margin = unit(c(top,right,bottom,left),"in")),
-    
-    DIFFlist[['figures']][['litterpercN']][['toti']] + ggtitle('b') + 
-      theme(plot.margin = unit(c(top,right,bottom,left),"in")),
-    DIFFlist[['figures']][['littercn']][['toti']] + ggtitle('e') +
-      theme(plot.margin = unit(c(top,right,bottom,left),"in")),
-    
-    DIFFlist[['figures']][['litterpercN']][['nminz']] + ggtitle('c')+
-      theme(plot.margin = unit(c(top,right,bottom,left),"in")),
-    DIFFlist[['figures']][['littercn']][['nminz']] + ggtitle('f') +
-      theme(plot.margin = unit(c(top,right,bottom,left),"in")),
-    
-    nrow=3, ncol=2),
-  
-  textGrob(" "), #bottom left
-  
-  xlabel, #bottom right
-  
-  widths = unit.c(unit(2.5, "lines"), unit(1, "npc") - unit(2.5, "lines")), 
-  heights = unit.c(unit(1, "npc") - unit(2.5, "lines"), unit(2.5, "lines")), 
-  nrow=2, ncol=2)
-
-dev.off()
-
-```
-3Bii. Loop through all plots: 1 page per trait type x community with 9 ES panels
+3Bi. Loop through all plots: 1 page per trait type x community with 9 ES panels
 ```{r plotregAll, echo=TRUE, warning=FALSE, message=FALSE}
+#plot notes:
+#predicted values calculated based on only the fixed effects
+#ci = 95% confidence interval on the fixed effect coefficients
+
 #add panel labels
 INVlist1<-AddPanelTitles(INVlist)
 NATlist1<-AddPanelTitles(NATlist)
 DIFFlist1<-AddPanelTitles(DIFFlist)
+DIFF2list1<-AddPanelTitles(DIFF2list)
 
 #plot and save
-PLANTlist<-list(INVlist1, NATlist1, DIFFlist1)
-PLANTlabel<-c('INV','NAT','DIFF')
-xlabel.PlantText<-c('Invasive species','Reference area','Invaded - Reference area')
+PLANTlist<-list(INVlist1, NATlist1, DIFFlist1, DIFF2list1)
+PLANTlabel<-c('INV','NAT','DIFF','DIFF2')
+xlabel.PlantText<-c('Invasive species','Reference area','Invaded - Reference area','Inv Sp. - Reference area')
 xlabel.TraitText<-c('Leaf %N','Litter %N','Leaf C:N','Litter C:N')
 l<-0
 for(l in 1:length(PLANTlist)){
   i<-0
   for (i in 1:length(TRAIT)){
     CURRTRAIT<-PLANTlist[[l]][[i]]
-    xlabel<- textGrob(paste(xlabel.PlantText[l],xlabel.TraitText[i], sep=", "), x=0.5, y=unit(1,'lines'))
+    xlabel<- textGrob(paste(xlabel.PlantText[l],xlabel.TraitText[i], sep=", "), x=0.5,
+                      y=unit(1,'lines'))
     
     #open image file connection
-    newfilename<-paste(paste(PLANTlabel[l],TRAIT[i], sep="_"),'.png',sep="")
-    png(paste(figuresPath,'allRegressionPlots',newfilename, sep='/'), units='in', 
-        width = fig.width*3.5, height = fig.height*3.5, res=fig.res)
+    newfilename<-paste(paste(PLANTlabel[l],TRAIT[i], sep="_"),'.pdf',sep="")
+    pdf(paste(figuresPath,'allRegressionPlots',newfilename, sep='/'), 
+        width = fig.width*3.5, height = fig.height*3.5)
 
     grid.arrange(
       textGrob('Std. Mean Diff. (Inv-Ref)', y=0.5,x=unit(1,'lines'), rot=90), # ylabel topleft
@@ -775,16 +856,175 @@ for(l in 1:length(PLANTlist)){
   }
 }
 
+```
 
+a. Invasive sp. traits
+```{r plotreg_inv, echo=TRUE, warning=FALSE, message=FALSE}
+newfilename<-"INVreg.pdf"
+pdf(paste(figuresPath,newfilename, sep='/'), width = fig.width, height = fig.height)
+INVlist[['figures']][['percN']][['soiln']] + 
+    xlab('Invasive sp. Leaf %N') + ylab('Soil N effect size')
+dev.off()
+
+#showing N-fixing status
+newfilename<-"INVreg_Nfix.pdf"
+pdf(paste(figuresPath,newfilename, sep='/'), width = fig.width*1.75, height = fig.height)
+INVlist_Nfix[['figures']][['percN']][['soiln']] + 
+    xlab('Invasive sp. Leaf %N') + ylab('Soil N effect size')
+dev.off()
+#small points have large variance
+#large points have small variance
 
 ```
 
+b. Reference traits
+```{r plotreg_ref, echo=TRUE, warning=FALSE, message=FALSE}
+# newfilename<-"NATreg.png"
+# png(paste(figuresPath,newfilename, sep='/'), units='in', width = fig.width*1.8, height = fig.height*.88, res=fig.res)
+# grid.arrange(
+#   NATlist[['figures']][['cn']][['nminz']] + 
+#     xlab('Ref. CWM leaf C:N') + ylab('Mineralization effect size') + ggtitle('a'),
+#   NATlist[['figures']][['cn']][['soilcn']] + 
+#     xlab('Ref. CWM leaf C:N') + ylab('Soil C:N effect size') + ggtitle('b'),
+#   ncol=2
+# )
+# dev.off()
+#small points have large variance
+#large points have small variance
+
+```
+
+c. Trait dissimilarity - invaded and reference areas
+```{r plotreg_diff, echo=TRUE, warning=FALSE, message=FALSE}
+newfilename<-"DIFFreg.pdf"
+pdf(paste(figuresPath,newfilename, sep='/'), width = fig.width*2, height = fig.height*2)
+grid.arrange(
+
+  DIFFlist[['figures']][['litterpercN']][['toti']] + 
+    xlab('Inv.-Ref. CWM litter %N') + ylab('Total inorg. N effect size') + ggtitle('a'),
+
+  DIFFlist[['figures']][['littercn']][['toti']] + 
+    xlab('Inv.-Ref. CWM litter C:N') + ylab('Total inorg. N effect size') + ggtitle('b'),
+
+  DIFFlist[['figures']][['cn']][['nminz']] + 
+    xlab('Inv.-Ref. CWM leaf C:N') + ylab('Mineralization effect size') + ggtitle('c'),
+  
+  DIFFlist[['figures']][['cn']][['soilcn']] + 
+    xlab('Inv.-Ref. CWM leaf C:N') + ylab('Soil C:N effect size') + ggtitle('d'),
+  ncol=2
+)
+dev.off()
 
 
+#colors are invaders' N-fixing status
+newfilename<-"DIFFreg_Nfix.pdf"
+pdf(paste(figuresPath,newfilename, sep='/'), width = fig.width*2, height = fig.height*2)
+grid.arrange(
+
+  DIFFlist_Nfix[['figures']][['litterpercN']][['toti']] + 
+    xlab('Inv.-Ref. CWM litter %N') + ylab('Total inorg. N effect size') + 
+    ggtitle('a') + guides(color=FALSE),
+
+  DIFFlist_Nfix[['figures']][['littercn']][['toti']] + 
+    xlab('Inv.-Ref. CWM litter C:N') + ylab('Total inorg. N effect size') + 
+    ggtitle('b')+ guides(color=FALSE),
+
+  DIFFlist_Nfix[['figures']][['cn']][['nminz']] + 
+    xlab('Inv.-Ref. CWM leaf C:N') + ylab('Mineralization effect size') + 
+    ggtitle('c')+ guides(color=FALSE),
+  
+  DIFFlist_Nfix[['figures']][['cn']][['soilcn']] + 
+    xlab('Inv.-Ref. CWM leaf C:N') + ylab('Soil C:N effect size') + 
+    ggtitle('d')+ guides(color=FALSE),
+  ncol=2
+)
+dev.off()
+
+#small points have large variance
+#large points have small variance
+```
+
+d. Trait dissimilarity - comparison of plots
+```{r plotreg_diff2, echo=TRUE, warning=FALSE, message=FALSE}
+newfilename<-"DIFF2reg_compare.pdf"
+pdf(paste(figuresPath,newfilename, sep='/'), width = fig.width*2, height = fig.height*4)
+
+grid.arrange(
+    DIFFlist[['figures']][['litterpercN']][['toti']] + 
+      xlab('Inv.-Ref. CWM litter %N') + ylab('Total inorg. N effect size') + 
+      ggtitle('a'),
+    DIFF2list[['figures']][['litterpercN']][['toti']] +
+      xlab('Inv. Sp. - Ref litter %N') + ylab('Total inorg. N effect size') + 
+      ggtitle('b'),
+    
+    DIFFlist[['figures']][['littercn']][['toti']] + 
+      xlab('Inv.-Ref. CWM litter C : N') + ylab('Total inorg. N effect size') + 
+      ggtitle('c'),
+    DIFF2list[['figures']][['littercn']][['toti']] + 
+      xlab('Inv. Sp. - Ref litter C : N') + ylab('Total inorg. N effect size') + 
+      ggtitle('d'),
+    
+    DIFFlist[['figures']][['cn']][['nminz']] + 
+      xlab('Inv.-Ref. CWM leaf C : N') + ylab('Mineralization effect size') + 
+      ggtitle('e'),
+    DIFF2list[['figures']][['cn']][['nminz']] + 
+      xlab('Inv. Sp. - Ref leaf C : N') + ylab('Mineralization effect size') + 
+      ggtitle('f'),
+    
+    DIFFlist[['figures']][['cn']][['soilcn']] + 
+      xlab('Inv.-Ref. CWM leaf C : N') + ylab('Soil C : N effect size') + 
+      ggtitle('g'),
+    DIFF2list[['figures']][['cn']][['soilcn']] + 
+      xlab('Inv. Sp. - Ref leaf C : N') + ylab('Soil C : N effect size') + 
+      ggtitle('h'),
+    ncol=2
+    
+    )
+
+dev.off()
 
 
+#showing which are N-fixers
+newfilename<-"DIFF2reg_compare_Nfix.pdf"
+pdf(paste(figuresPath,newfilename, sep='/'), width = fig.width*2, height = fig.height*4)
+grid.arrange(
+    DIFFlist_Nfix[['figures']][['litterpercN']][['toti']] + 
+      xlab('Inv.-Ref. CWM litter %N') + ylab('Total inorg. N effect size') + 
+      ggtitle('a')+ guides(color=FALSE),
+    DIFF2list_Nfix[['figures']][['litterpercN']][['toti']] +
+      xlab('Inv. Sp. - Ref litter %N') + ylab('Total inorg. N effect size') + 
+      ggtitle('b')+ guides(color=FALSE),
+    
+    DIFFlist_Nfix[['figures']][['littercn']][['toti']] + 
+      xlab('Inv.-Ref. CWM litter C : N') + ylab('Total inorg. N effect size') + 
+      ggtitle('c')+ guides(color=FALSE),
+    DIFF2list_Nfix[['figures']][['littercn']][['toti']] + 
+      xlab('Inv. Sp. - Ref litter C : N') + ylab('Total inorg. N effect size') + 
+      ggtitle('d')+ guides(color=FALSE),
+    
+    DIFFlist_Nfix[['figures']][['cn']][['nminz']] + 
+      xlab('Inv.-Ref. CWM leaf C : N') + ylab('Mineralization effect size') + 
+      ggtitle('e')+ guides(color=FALSE),
+    DIFF2list_Nfix[['figures']][['cn']][['nminz']] + 
+      xlab('Inv. Sp. - Ref leaf C : N') + ylab('Mineralization effect size') + 
+      ggtitle('f')+ guides(color=FALSE),
+    
+    DIFFlist_Nfix[['figures']][['cn']][['soilcn']] + 
+      xlab('Inv.-Ref. CWM leaf C : N') + ylab('Soil C : N effect size') + 
+      ggtitle('g')+ guides(color=FALSE),
+    DIFF2list_Nfix[['figures']][['cn']][['soilcn']] + 
+      xlab('Inv. Sp. - Ref leaf C : N') + ylab('Soil C : N effect size') + 
+      ggtitle('h')+ guides(color=FALSE),
+    ncol=2
+    
+    )
+dev.off()
+
+#small points have large variance
+#large points have small variance
+
+#DIFF2list_Nfix[['figures']][['cn']][['soilcn']] 
 
 
-
-
+```
 

@@ -4,7 +4,7 @@
 
 ### Load functions ####################################################
 source('CODE/paperData/fxn_makeIndex.R') #for MakeIndex()
-library(plyr) # for ldply
+require(plyr) # for ldply
 
 
 

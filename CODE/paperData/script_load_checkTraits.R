@@ -24,7 +24,7 @@ list.Xsp.TraitDfs
 ##C. For trait data where there is more than 1 species, expand the table to fit each species in its own row - keep this in a list of dataframes
 list.Xsp.expanded.traitDfs<-list()
 check.list<-list()
-library(reshape)
+require(reshape)
 i<-0
 for(i in 1:length(CATS)){
   

@@ -3,7 +3,7 @@
 
 
 ### Load libraries ####################################################
-library(plyr)
+require(plyr)
 
 
 
@@ -67,7 +67,6 @@ tryGS<-tryDataT.cu[tryDataT.cu$AccGenusSpecies %in% paperGenusSpecies,]
 
 
 
-
 ### For the GENUS-SPECIES from the paper data did not find a match in the try data, pull GENUS info from try data ####################################################
 
 # 1. Determine the GS matches, no matches
@@ -85,7 +84,6 @@ paperGenus<-unique(GX)
 # 3. Subset tryDataT by the paper unique genus list
 tryGX<-tryDataT.cu[tryDataT.cu$AccGenus %in% paperGenus,]
 #dim(tryGX)
-
 
 
 

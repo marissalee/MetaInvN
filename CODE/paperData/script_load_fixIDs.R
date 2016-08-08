@@ -63,6 +63,7 @@ length(usedAgg); sum(usedAgg); sum(allAgg) #should all be the same value
 #iii. spID: combine obsID and spEntryID
 
 #First, check to see if there will be duplicate spIDs
+require(plyr)
 tmp<-ddply(species, ~obsID+spEntryID, summarise, n = length(obsID))
 sum(tmp$n > 1) # this should be 0.  If not, there will be duplicate spIDs
 #morethan1<-which(tmp$n > 1)

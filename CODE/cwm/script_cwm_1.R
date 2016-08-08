@@ -15,7 +15,6 @@ sum(!spIDsyn$obsID %in% observations$obsID) # this should be 0.  If not, that me
 # 3. Add an 'spInvasive','spGrowth','spHeight' columns to spIDsyn
 spIDsyn1<-merge(spIDsyn,species, by=c('spID','obsID','GenusSpecies','Genus','Species'))
 spIDsyn1[!spIDsyn1$GenusSpecies == spIDsyn1$spName,c('GenusSpecies','spName')] # check to make sure that the merge happened correctly.  Check.
-#View(spIDsyn1)
 
 # 4. For each trait, make a column that indicates if the species has 1) trait mean and a non-0 value for invaded cover OR native cover.
 #loop through traitsOfInterest; store whether row has all 3 pieces of data
@@ -123,7 +122,6 @@ for(t in 1:length(traitsOfInterest)){
     includeCol, 'InvCovHere', 'NatCovHere')
   
   sub1<-spIDsyn2[spIDsyn2$obsID %in% obsid1[!is.na(obsid1)],colnames(spIDsyn2) %in% cols]
-  
   #save the subsetted data
   df.list[[as.character(traitsOfInterest[t])]]<-sub1
 }

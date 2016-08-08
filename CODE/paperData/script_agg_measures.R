@@ -1,7 +1,7 @@
 #1_paperData/script_agg_measures.R
 #Aggregate measures 
 
-library(plyr) #for ldply
+require(plyr) #for ldply
 source('CODE/paperData/fxn_1_Calcs.R')
 source('CODE/paperData/fxn_2_Agg.R')
 source('CODE/paperData/fxn_3_NumOps.R')
