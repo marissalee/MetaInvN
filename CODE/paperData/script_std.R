@@ -22,7 +22,7 @@ for(i in 1:length(COVCAT)){
   subdf<-summ.covUnit[summ.covUnit$covCat==COVCAT[i],]
   covUnitList[[as.character(COVCAT[i])]]<-orderBy(~-numMeas, subdf)
 }
-#covUnitList
+covUnitList
 
 #2. Make sure that the data is coded right (WHAT DOES THAT MEAN?)
 #str(covUnitList)
@@ -31,10 +31,10 @@ for(i in 1:length(COVCAT)){
 
 #3. Assign a common unit and create index for each Cat
 source('CODE/paperData/script_commUnit_cov.R') #TASK= Assign a common unit for each Cat; NEEDS= covUnitList; MAKES= c.unitIndex
-#c.unitIndex
+c.unitIndex
 source('CODE/paperData/script_convertOps_cov.R') #TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
 colnames(unitIndex)[1]<-'covCat'
-#unitIndex
+unitIndex
 
 #4. Convert values to assigned common unit
 #unitIndex
@@ -66,7 +66,7 @@ for(i in 1:length(TRAITCAT)){
   subdf<-summ.traitUnit[summ.traitUnit$traitCat==TRAITCAT[i],]
   traitUnitList[[as.character(TRAITCAT[i])]]<-orderBy(~-numMeas, subdf)
 }
-#traitUnitList
+traitUnitList
 
 #2. Make sure that the data is coded right
 #str(traitUnitList)
@@ -78,10 +78,10 @@ for(i in 1:length(TRAITCAT)){
 
 #3. Assign a common unit and create index for each Cat
 source('CODE/paperData/script_commUnit_traits.R') # TASK= Assign a common unit for each Cat; NEEDS= covUnitList; MAKES= c.unitIndex
-#c.unitIndex
+c.unitIndex
 source('CODE/paperData/script_convertOps_traits.R') # TASK= Create an index for how to convert to common unit; NEEDS= c.unitIndex; MAKES= index.list
 colnames(unitIndex)[1]<-'traitCat'
-#unitIndex
+unitIndex
 
 #4. Convert values to assigned common unit
 #unitIndex
@@ -113,7 +113,7 @@ for(i in 1:length(MEASCAT)){
   subdf<-summ.measUnit[summ.measUnit$measCat==MEASCAT[i],]
   measUnitList[[as.character(MEASCAT[i])]]<-orderBy(~-numMeas, subdf)
 }
-#measUnitList
+measUnitList
 
 #2. Make sure that the data is coded right
 #str(measUnitList)
@@ -125,7 +125,7 @@ for(i in 1:length(MEASCAT)){
 
 #3. Assign a common unit and index to convert units to the common unit
 source('CODE/paperData/script_commUnit_meas.R') # TASK= Assign a common unit for each measCat; NEEDS= measUnitList; MAKES= c.unitIndex
-#c.unitIndex
+c.unitIndex
 source('CODE/paperData/script_convertOps_meas.R') #TASK= Assing an index to convert units to the common unit; NEEDS= c.unitIndex; MAKES= index.list
 colnames(unitIndex)[1]<-'measCat'
 #unitIndex

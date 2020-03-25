@@ -34,6 +34,12 @@ _________________________________________________________________
 # 1. LOAD RAW DATA (.TXT) AND DO SOME MINIMAL CLEANING:
 Cleaning involves: (a) Fix the format of NAs, (b) Make the row keys numeric in dataframe (e.g. obsID, xAggNum), (c) Check that there are no duplicate obsIDs, (d) Add row keys where needed (e.g. paperID, aggID: combine obsID and xAggNum, spID: combine obsID and spEntryID), (e) Check that trait and cover-generated spIDs match the 'species' dataframe's spID by species names, (f) Make data values numeric in each dataset
 ```{r loadData, echo=TRUE, message=FALSE, warning=FALSE}
+
+# install.packages(
+#   "https://cran.r-project.org/src/contrib/Archive/doBy/doBy_4.5-15.tar.gz", 
+#   repos = NULL, type = "source"
+# )
+
 source('CODE/paperData/script_load.R') #TASK= Load and clean raw data structure; NEEDS= files in rawData folder; MAKES = papers, observations, measures, measAgg, cover, covAgg, traits, traitAgg
 warnings() #warning messages that say 'NAs introduced' are okay
 
@@ -45,6 +51,7 @@ _________________________________________________________________
 Convert variance measures (e.g. SE, SD, 95CI) to variance (VAR) in the following datasets: cover, covAgg, traits, traitAgg, measures, measAgg
 ```{r stdVar,echo=TRUE, message=FALSE, warning=FALSE}
 source('CODE/paperData/script_stdVar.R') #TASK= Standarize variance; NEEDS= cover, covAgg, traits, traitAgg, measures, measAgg; MAKES= ammends same df with extra columns
+
 ```
 _________________________________________________________________
 # 2B. AGGREGATE VALUES WITHIN AN OBSERVATION 
